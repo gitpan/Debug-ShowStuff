@@ -1,0 +1,274 @@
+Debug/ShowStuff version 1.00
+========================
+
+NAME
+    Debug::ShowStuff - A collection of handy debugging routines for
+    displaying the values of variables with a minimum of coding.
+
+SYNOPSIS
+            use Debug::ShowStuff ':all';
+        
+            # display values of a hash or hash reference
+            showhash %hash;
+            showhash $hashref;
+
+            # display values of an array or array reference
+            showarr @arr;
+            showarr $arrref;
+        
+            # show all nested structures
+            showref $reference
+        
+            # show all the params received through CGI
+            showcgi();
+        
+            # A particularly fancy utility: display STDERR at top of web page
+            my $warnings = showstderr;
+
+INSTALLATION
+    "Debug::ShowStuff" can be installed with the usual routine:
+
+            perl Makefile.PL
+            make
+            make test
+            make install
+
+    You can also just copy ShowStuff.pm into the Dev/ directory of one of
+    your library trees.
+
+DESCRIPTION
+    "Debug::ShowStuff" grew dynamically from my needs in debugging code. I
+    found myself doing the same tasks over and over... displaying the keys
+    and values in a hash, displaying the elements in an array, displaying
+    the output of STDERR in a web page, etc. "Debug::ShowStuff" began as two
+    or three of my favorite routines and grew as I added to that collection.
+    Finally I decided to publish these tools in the hope that others will
+    find them useful.
+
+    "Debug::ShowStuff" is intended for debugging, not for production work. I
+    would discourage anyone from using "Debug::ShowStuff" in
+    ready-for-primetime code. "Debug::ShowStuff" is only for quick-n-dirty
+    displays of variable values in order to debug your code.
+
+    These functions display values that I personally like them displayed,
+    but your preferences may be different. I encourage you to modify
+    "Debug::ShowStuff" to suit your own needs.
+
+TEXT MODE and WEB MODE
+    The functions in "Debug::ShowStuff" are designed to output either in
+    plain text mode (like if you're running the script from a command
+    prompt, or in web mode (like for a CGI). If the script appears to be
+    running in a CGI or other web mode (see the "inweb" function) then
+    values are output using HTML, with special HTML characters escaped for
+    proper display. Othewise the values are output as they are.
+
+    Generally you won't need to bother telling the routines
+    "Debug::ShowStuff" which way to display stuff... it figures it out on
+    its own.
+
+DYNAMIC OUTPUT and RETURN
+    The functions that start with "show" dynamically either output to STDOUT
+    or STDERR, or return a string to a variable, depending on the context in
+    which the functions are called. For example, if you call showhash in a
+    void context:
+
+      showhash %myhash;
+
+    then the contents of %myhash are output to STDOUT. On the other hand, if
+    the function is called in scalar context:
+
+      my $var = showhash(%myhash);
+
+    then the same string that would have been output to STDOUT is instead
+    returned and stored in $var. If the function is called in list context:
+
+      my @arr = showhash(%myhash);
+
+    then the array is assigned a single element that consists of the entire
+    string that should be output.
+
+FUNCTION DESCRIPTIONS
+showhash
+    Displays the keys and values in a hash. Input is either a single hash
+    reference or a regular hash. If it looks like the sub is being called in
+    a web environment (as indicated by the inweb function) then the hash is
+    displayed using HTML. Otherwise the hash is displayed using plain text.
+
+showarray
+    Displays the values of an array. Each element is displayed in a table
+    row (in web mode) or on a separate line (in plain text mode). Undefined
+    elements are displayed as the string "[undef]".
+
+    If "showarray" receives exactly one argument, and if that item is an
+    array reference, then the routine assumes that you want to display the
+    elements in the referenced array. Therefore, the following blocks of
+    code display the same thing:
+
+       showarray @myarr;
+       showarray \@myarr;
+
+showarraydiv
+    Works just like "showarray", except that in text mode displays a solid
+    line between each element of the array.
+
+showscalar
+    Outputs the value of a scalar. The name is slightly innaccurate: you can
+    input an array. The array will be joined together to form a single
+    scalar.
+
+showcgi
+    Displays the CGI parameter keys and values. This sub always outputs
+    HTML.
+
+    The optional parameter "q", may be a CGI query object:
+
+       my $query = CGI->new();
+       showcgi q => $query;
+
+    If "q" is not sent, then a CGI object is created on the fly.
+
+    If the optional parameter "skipempty" is true:
+
+       showcgi skipempty => 1;
+
+    then CGI params that are empty (i.e. do not have at least one non-space
+    character) are not displayed.
+
+showref($ref, %options)
+    Displays a hash, array, or scalar references, treeing down through other
+    references it contains. So, for example, the following code:
+
+     my $ob = {
+        name    => 'Raha',
+        email   => 'raha@idocs.com',
+        friends => [
+           'Shalom',
+           'Joe',
+           'Furocha',
+           ],
+        };
+    
+     showref $ob;
+
+    produces the following output:
+
+       /-----------------------------------------------------------\
+       friends =
+          ARRAY
+             Shalom
+             Joe
+             Furocha
+       email = raha@idocs.com
+       name = Raha
+       \-----------------------------------------------------------/
+
+    The values of the hash or arrays being referenced are only displayed
+    once, so you're safe from infinite recursion.
+
+    There are several optional parameters, described in the following
+    sections.
+
+  maxhash
+
+    The "maxhash" option allows you to indicate the maximum number of hash
+    elements to display. If a hash has more then "maxhash" elements then
+    none of them are displayed or recursed through, and instead an indicator
+    of how many elements there are is output. So, for example, the following
+    command only displays the hash values if there are 10 or fewer elements
+    in the hash:
+
+       showref $myob, maxhash=>10;
+   
+    If "maxhash" is not sent then there is no maximum.
+
+  maxarr
+
+    The "maxarr" option allows you to indicate the maximum number of array
+    elements to display. If an array has more then "maxarr" elements then
+    none of them are displayed or recursed through, and instead an indicator
+    of how many elements there are is output. If "maxarr" is not sent then
+    there is no maximum.
+
+  depth
+
+    The "depth" option allows you to indicate a maximum depth to display in
+    the tree. If "depth" is not sent then there is no maximum depth.
+
+println
+    In general, works just like "print", but adds a newline to the output.
+
+    If "println" is called with no arguments, it simply outputs a newline.
+    If "println" is called with exactly one argument, and that argument is
+    the undefined value, then "println" outputs "[undef]". If it is called
+    with multiple arguments, and one or more of them is undefined, then, in
+    normal Perl manner, those undefined's become empty strings and a warning
+    it output (because, of course, you DO have warnings turned on, right?).
+
+    When "println" is called in web mode, all arguments are HTML escaped.
+    Furthermore, the entire output is enclosed in a "<P>" element so that
+    the output is in a paragraph by itself. The "<P>" element is given a CSS
+    style so that regardless of the background color and font color of the
+    web page, the values sent to "println" are displayed with a white
+    background and black text.
+
+dieln
+    Works just like the "die" command, except it always adds an end-of-line
+    to the input array so you never get those "at line blah-blah-blah"
+    additions.
+
+pressenter
+    For use at the command line. Outputs a prompt to "press enter to
+    continue", then waits for you to do exactly that.
+
+httpheader
+    Outputs an HTTP header.
+
+showstderr
+    This function allows you to see, in the web page produced by a CGI,
+    everything the CGI output to STDERR.
+
+    To use "showstderr", assign the return value of the function to a
+    variable that is scoped to the entire CGI script:
+
+      my $stderr = showstderr();
+
+    You need not do anything more with that variable. The object reference
+    by your variable holds on to everything output to both STDOUT and
+    STDERR. When the variable goes out of scope, the object outputs the
+    STDOUT content with the STDERR content at the top of the web page.
+
+setoutput
+    Sets the default output handle. By default, routines in
+    "Debug::ShowStuff" output to STDOUT. With this command you can set the
+    default output to STDERR, or back to STDOUT. The following command sets
+    default output to STDERR:
+
+       setoutput 'stderr';
+
+    This command sets output back to STDOUT:
+
+       setoutput 'stdout';
+
+    When default output is set to STDERR then the global
+    "$Debug::ShowStuff::forceplain" is set to true, which means that
+    functions in this module always output in text mode, not web mode.
+
+nullfix
+    Takes a single argument. If that argument is undefined, returns an empty
+    string. Otherwise returns the argument exactly as it is.
+
+TERMS AND CONDITIONS
+    Copyright (c) 2001-2003 by Miko O'Sullivan. All rights reserved. This
+    program is free software; you can redistribute it and/or modify it under
+    the same terms as Perl itself. This software comes with NO WARRANTY of
+    any kind.
+
+AUTHORS
+    Miko O'Sullivan miko@idocs.com
+
+VERSION
+    Version 1.00 May 29, 2003
+        Initial public release
+
+    # return true 1;
+
