@@ -1,16 +1,40 @@
 package Debug::ShowStuff;
 use strict;
+# use Filter::HereDocIndent;
 use Carp;
-use vars qw[$VERSION $out $forceplain];
+# use Data::Default ':all';
+use Tie::IxHash;
+use vars qw[$VERSION];
+
+# allow for forced context
+# This is a change to how Debug::ShowStuff used to work.  It used to be that
+# the output of a function (e.g. println) was returned as a scalar if the
+# function call was made in an array context.  This got confusing when the
+# call was the last call in a function.  I'm changing it so that, by default,
+# the function always outputs to the standard file handle (usually STDOUT).
+use vars qw[ $always_void ];
+$always_void = 1;
+
+# allow for forced web/plain
+use vars qw[ $forceweb ];
 
 # default $out to STDOUT
+use vars qw[ $out ];
 $out = *STDOUT;
 
+# default $out to STDOUT
+use vars qw[ $active ];
+$active = 1;
+
+# INDENT: how far to indent a line
+our $indent_level = 0;
+my $indent_tab = '   ';
+
 # version
-$VERSION = '1.00';
+$VERSION = '1.10';
 
 # constants
-use constant STDTABLE => "<P>\n<TABLE BORDER=4 RULES=ROWS CELLSPACING=0 CELLPADDING=3>\n";
+use constant STDTABLE => qq|<p>\n<table border="4" rules="rows" cellspacing="0" cellpadding="3">\n|;
 
 
 #---------------------------------------------------------------------
@@ -26,7 +50,7 @@ push @ISA, 'Exporter';
 	showarraydiv showarrdiv
 	showcgi
 	showscalar showsca
-	showref 
+	showref
 	showstderr
 	setoutput
 	pressenter
@@ -34,20 +58,32 @@ push @ISA, 'Exporter';
 	httpheader
 	httpheaders
 	println
+	printnorm
+	printhr
+	preln
 	dieln
-	nullfix
 	diearr
-	];
+	fixundef
+	diearr
+	findininc
+	confirm
+	output_to_file
+	define_show
+	showtainted
+	showstuff
+	showsth
+	indent
+];
 
 %EXPORT_TAGS = ('all' => [@EXPORT_OK]);
-# 
+#
 # export
 #---------------------------------------------------------------------
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
 # opening POD
-# 
+#
 
 =head1 NAME
 
@@ -56,12 +92,14 @@ the values of variables with a minimum of coding.
 
 =head1 SYNOPSIS
 
+Here's a sampling of a few of my favorite functions in this module.
+
 	use Debug::ShowStuff ':all';
 	
 	# display values of a hash or hash reference
 	showhash %hash;
 	showhash $hashref;
-
+	
 	# display values of an array or array reference
 	showarr @arr;
 	showarr $arrref;
@@ -85,43 +123,50 @@ C<Debug::ShowStuff> can be installed with the usual routine:
 	make test
 	make install
 
-You can also just copy ShowStuff.pm into the Dev/ directory of one of your library trees.
+You can also just copy ShowStuff.pm into the Debug/ directory of one of your library trees.
 
 =head1 DESCRIPTION
 
 C<Debug::ShowStuff> grew dynamically from my needs in debugging code.  I found 
 myself doing the same tasks over and over... displaying the keys and
 values in a hash, displaying the elements in an array, displaying the output
-of STDERR in a web page, etc.  C<Debug::ShowStuff> 
-began as two or three of my favorite routines and grew as I added to that 
-collection.  Finally I decided to publish these tools in the hope that others
-will find them useful.
+of STDERR in a web page, etc.  C<Debug::ShowStuff> began as two or three of my
+favorite routines and grew as I added to that collection.  Finally I decided
+to publish these tools in the hope that other Perl hackers will find
+them useful.
 
 C<Debug::ShowStuff> is intended for debugging, not for production work.  I would
-discourage anyone from using C<Debug::ShowStuff> in ready-for-primetime code.  
-C<Debug::ShowStuff> is only for quick-n-dirty displays of variable values in order
-to debug your code.
+discourage anyone from using C<Debug::ShowStuff> in ready-for-primetime code.
+C<Debug::ShowStuff> is only for quick-n-dirty displays of variable values in
+order to debug your code.
 
-These functions display values that I personally like them displayed, but your
-preferences may be different.  I encourage you to modify C<Debug::ShowStuff> to
-suit your own needs.  
+These functions display values the way I personally like them displayed.  Your
+preferences may be different.  I encourage you to modify C<Debug::ShowStuff>
+to suit your own needs.
 
-=head1 TEXT MODE and WEB MODE
+=head1 text and web modes
 
-The functions in C<Debug::ShowStuff> are designed to output either in plain text
-mode (like if you're running the script from a command prompt, or in web mode
-(like for a CGI).  If the script appears to be running in a CGI or other 
+The functions in C<Debug::ShowStuff> are designed to output either in plain
+text mode (like if you're running the script from a command prompt), or in web
+mode (like from a CGI).  If the script appears to be running in a CGI or other
 web mode (see the C<inweb> function) then values are output using HTML, with
 special HTML characters escaped for proper display.  Othewise the values are
 output as they are.
 
-Generally you won't need to bother telling the routines C<Debug::ShowStuff> 
-which way to display stuff... it figures it out on its own.
+Generally you won't need to bother telling C<Debug::ShowStuff> if you're in
+text or web mode... it figures it out on its own.
 
-=head1 DYNAMIC OUTPUT and RETURN
+=head1 dynamic output/return: different than previous versions
+
+NOTE: The dynamic behavior of "show" functions has changed since the last
+version of Debug::ShowStuff.  "show" functions now always output to STDOUT
+or STDERR unless $Debug::ShowStuff::always_void is set to false. By default
+$always_void is true.
+
+If $always_void is false, then the following applies:
 
 The functions that start with "show" dynamically either output to STDOUT or
-STDERR, or return a string to a variable, depending on the context in which the
+STDERR or return a string, depending on the context in which the
 functions are called.  For example, if you call showhash in a void context:
 
   showhash %myhash;
@@ -132,28 +177,141 @@ function is called in scalar context:
   my $var = showhash(%myhash);
 
 then the same string that would have been output to STDOUT is instead
-returned and stored in $var.  If the function is called in list context:
+returned and stored in $var.  
 
-  my @arr = showhash(%myhash);
+By default, output is sent to STDOUT, not STDERR.  You can change the
+default output to STDERR using the C<setoutput> command.  See the docs
+for that command for more detail.
 
-then the array is assigned a single element that consists of the entire
-string that should be output.
+=head1 Displaying "invisible" strings
+
+To facilitate telling the difference between C<[undef]> and an empty string,
+functions output the strings "[undef]" and "[empty string]".  So, for example,
+this code:
+
+ println undef;
+ println "";
+
+produces this:
+
+ [undef]
+ [empty string]
 
 =head1 FUNCTION DESCRIPTIONS
 
 =cut
 
-# 
+#
 # opening POD
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
+# default
+#
+# Private sub
+#
+sub default {
+	for (my $i=0; $i<=$#_; $i++) {
+		defined($_[$i]) and return $_[$i];
+	}
+	
+	return undef;
+}
+#
+#------------------------------------------------------------------------------
+
+
+
+#------------------------------------------------------------------------------
+# showstuff
+#
+
+=head2 showstuff()
+
+This function turns on/off most of the functions in this module, with one
+import exception explained below.  The function also returns the state of
+whether or not Debug::ShowStuff is on/off.
+
+If a parameter is sent, that param is used to turn display on/off.  The
+value is stored in the global variable $Debug::ShowStuff::active.
+
+The function is also used by most subroutines to determine if they should
+actually output anything.  $active is not the only criteria used to determine
+if Debug::ShowStuff is active.  The algorithm is as follows:
+
+- If the environment variable SHOWSTUFF is defined and false then this function
+returns false regardless of the state of $active.
+
+- If the environment variable $ENV{'SHOWSTUFF'} is not defined or is defined
+and true then $active is used to determine on/off.
+
+The purpose of this algorithm is to allow the used of debugging display in a
+regression test but turn off those displays when a lot of tests are run at once
+and only pass/fail information is needed from the regtest.
+
+For example, suppose you have a script as follows:
+
+ #!/usr/bin/perl -w
+ use strict;
+ use Debug::ShowStuff ':all';
+ 
+ my ($rv);
+ 
+ println 'running my_function()';
+ $rv = my_function();
+ println 'the returned value is: ', $rv;
+ 
+ $rv or die 'error!';
+
+The output of the script might look something like this:
+
+ running my_function()
+ 1
+
+Now suppose you call that and other scripts from some OTHER script, and
+you don't want the screen cluttered with all that debugging, you just want
+to see if all those scripts run successfully.  You could use $ENV{'SHOWSTUFF'}
+to turn off showing stuff:
+
+ #!/usr/bin/perl -w
+ use strict;
+ use Debug::ShowStuff ':all';
+ 
+ my @tests = ("./script1.pl", "./script2.pl", "./script3.pl");
+ $ENV{'SHOWSTUFF'} = 0;
+ 
+ foreach my $test () {
+    system($test) and die "$test failed";
+ }
+
+In that case, none of the stuff from the test scripts would be output.
+
+=cut
+
+sub showstuff {
+	if (@_)
+		{ $active = $_[0] }
+	
+	# if SHOWSTUFF environment variable is defined and false
+	if ( defined($ENV{'SHOWSTUFF'}) && (! $ENV{'SHOWSTUFF'}) )
+		{ return 0 }
+	
+	# else use $active
+	return $active;
+}
+#
+# showstuff
+#------------------------------------------------------------------------------
+
+
+
+#------------------------------------------------------------------------------
 # htmlesc
-# 
+#
 # Private sub.  Formats a string for literal output in HTML.  An undefined
 # first argument is returned as an empty string.
-# 
+#
 sub htmlesc {
 	my ($rv) = @_;
 	return '' unless defined($rv);
@@ -164,151 +322,415 @@ sub htmlesc {
 	$rv =~ s|>|&#62;|g;
 	return $rv;
 }
-# 
+#
 # htmlesc
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
+# println
+#
+
+=head2 println
+
+C<println> was the original Debug::ShowStuff function.  It simply outputs
+the given values.
+
+In text mode it adds a newline to the end.
+
+For example, this code:
+
+ println "hello world";
+
+produces this output, including the newline:
+
+ hello world
+
+In web mode it puts the output inside a <p> element. The values are HTML
+escaped so that HTML-significant characters like lt<> and gt<> are actually
+displayed as lt<> and gt<>.  The <p> element has CSS styles set so that the
+characters are always black, the background is always white, text is
+left-alignedthe, and the <p>, element has a black border, regardless
+of the styles of the surrounding elements. So, for example, in web mode,
+the following code:
+
+ println 'whatever';
+
+outputs the following HTML:
+
+ <p style="background-color:white;color:black;text-align:left">whatever</p>
+
+Like other "show" functions, undef is output as the string "[undef]" and
+an empty string is output as the string "[empty string]".
+
+Values in the arguments array are output concatenated together with no
+spaces in between.  Each value is evaluated independently for if it
+is undef, empty string, or a string with visible content.  So, for example,
+this code:
+
+ println "whatever", "", undef, "dude";
+
+outputs this:
+
+ whatever[empty string][undef]dude
+
+=cut
+
+sub println {
+	showstuff() or return '';
+	
+	my ($str);
+	my $fh = getfh(wantarray);
+	
+	# special case: no arguments: just output an eol and return
+	if (! @_) {
+		print $fh "\n";
+		return;
+	}
+	
+	# $str = join('', map {defined($_) ? $_ : '[undef]'} @_);
+	$str = join('', map {define_show($_)} @_);
+	
+	# print as web page
+	if (inweb()) {
+		print $fh '<p style="background-color:white;color:black;text-align:left">', htmlesc($str), "</p>\n";
+	}
+	
+	# else print as text
+	# add indents at start and at every newline
+	else {
+		my ($indent);
+		$indent = '';
+		
+		for (1..$indent_level)
+			{ $indent .= $indent_tab }
+		
+		$str =~ s|\n|\n$indent|gs;
+		$str = $indent . $str;
+		
+		print $fh $str, "\n";
+	}
+	
+	ismem($fh) and return $fh->mem();
+}
+#
+# println
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
 # showhash
-# 
+#
 
-=head1 showhash
+=head2 showhash
 
-Displays the keys and values in a hash.  Input is either a single hash reference or a regular hash.
-If it looks like the sub is being called in a web environment (as indicated by the inweb function)
-then the hash is displayed using HTML.  Otherwise the hash is displayed using plain text.
+Displays the keys and values in a hash.  Input is either a single hash
+reference or a regular hash. The key=values pairs are sorted by the names
+of the keys.
+
+So, for example, the following code:
+
+ my %hash = (
+    Larry => 'curly headed guy',
+    Curly => 'funny bald guy',
+    Moe => 'guy in charge',
+ );
+
+ showhash %hash;
+
+Produces the following output:
+
+ ---------------------------------------
+ Curly = funny bald guy
+ Larry = curly headed guy
+ Moe   = guy in charge
+ ---------------------------------------
+
+This code, using a hash reference, produces exactly the same output:
+
+ my $hash = {
+    Larry => 'curly headed guy',
+    Curly => 'funny bald guy',
+    Moe => 'guy in charge',
+ };
+
+ showhash $hash;
+
+If an undef value is sent instead of a hashref, then that fact is displayed
+instead of a hash.  For example consider the following code that uses
+a variable that is undef:
+
+ my ($hash);
+ showhash $hash;
+
+That code produces this output:
+
+ ---------------------------------------
+ Only one element input and it was undefined
+ ---------------------------------------
+
+Optional arguments only come into play if the first argument is a hashref.
+
+B<option:> title => "string"
+
+If this option is sent, the string is displayed at the top of the
+display of the hash values.
+
+B<option:> line_cut => 1
+
+If the C<line_cut> option is sent, then each value is truncated after the first
+newline if there is one.
 
 =cut
 
 sub showhash {
+	showstuff() or return '';
+	
 	# HTML
 	if (inweb())
 		{return showhashhtml(@_)}
-
+	
 	# plain text
 	else
 		{return showhashplain(@_)}
-
 }
-# 
+#
 # showhash
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
 # showhashhtml
-# 
+#
 # Private sub. Displays the keys and values in a hash, formatted for HTML.
-# 
+#
+# Code in this sub is not indented because it uses a lot of here documents.
+#
 sub showhashhtml {
 
 my %myhash;
 my $maxkey = 0;
 my $maxval = 0;
 my $fh = getfh(wantarray);
+my (%opts, $linecut, @keys);
 
-# print $fh "<P>\n<TABLE BORDER=4 RULES=ROWS CELLSPACING=0 CELLPADDING=3>\n";
 print $fh STDTABLE;
 
 # special case: only one element and it's undefined
 if ( (@_ == 1) && (! defined($_[0])) ) {
-	print $fh "<TR><TD>Only element input and it was undefined</TD></TR></TABLE>\n";
+	print $fh "<tr><td>Only element input and it was undefined</td></tr></table>\n";
 	return;
 }
 
-if (ref $_[0])
-	{%myhash = %{$_[0]}}
-else
-	{%myhash = @_}
+if (ref $_[0]){
+	%myhash = %{$_[0]};
+	%opts = @_[1..$#_];
+	$linecut = $opts{'line_cut'} || $opts{'line_chop'} || $opts{'first_line'};
+}
+else {
+	%myhash = @_;
+}
 
-if (ref($_[0])) {
+if (ref $_[0]) {
 	my $title;
 	
-	if ($_[1])
-		{$title = $_[1]}
+	if (defined $opts{'title'})
+		{$title = $opts{'title'}}
 	else
 		{$title = $_[0]}
-
-	print $fh "<TR><TH COLSPAN=3>", htmlesc($title), "</TH></TR>\n"
+	
+	print $fh '<tr><th colspan="3">', htmlesc($title), "</th></tr>\n"
 }
 
 print $fh <<"(TABLETOP2)";
-<TR BGCOLOR=NAVY>
-<TH STYLE="background-color:navy;color:white">key</TH>
-<TD>&nbsp;&nbsp;&nbsp;</TD>
-<TH STYLE="background-color:navy;color:white">value</TH>
-</TR>
+<tr bgcolor="navy">
+<th style="background-color:navy;color:white">key</th>
+<td>&nbsp;&nbsp;&nbsp;</td>
+<th style="background-color:navy;color:white">value</th>
+</tr>
 (TABLETOP2)
 
-foreach my $key (sort(keys(%myhash)))
-	{print $fh '<TR><TD>', htmlesc($key), '</TD><TD></TD><TD>', htmlesc($myhash{$key}), "</TD></TR>\n"}
+# get array of keys
+@keys = keys(%myhash);
 
-print $fh "</TABLE>\n<P>\n";
+# sort keys unless sort param is sent as false
+if (default $opts{'sort'}, 1) {
+	@keys = sort { lc($a) cmp lc($b) } @keys;
+}
 
-ref($fh) and return $fh->mem;
+# loop through keys, outputting key=value pairs
+foreach my $key (@keys) {
+	my $val = $myhash{$key};
+	
+	if ($linecut){
+		$val =~ s|\n.*||s;
+		$val .= '<b>...</b>';
+	}
+	
+	print $fh
+		'<tr valign="top">',
+		'<td>', htmlesc($key), '</td>',
+		'<td></td>',
+		'<td>', htmlesc($val), '</td>',
+		"</tr>\n";
+}
+
+# if empty hash, output that fact
+if (! @keys) {
+	print $fh
+		'<tr>',
+		'<td align="center" colspan="3"><i>empty hash</i></td>',
+		"</tr>\n";
+}
+
+# close table
+print $fh "</table>\n<p>\n";
+
+ismem($fh) and return $fh->mem;
 return '';
 }
-# 
+#
 # showhashhtml
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
 # showhashplain
-# 
+#
 # Private sub. Displays the keys and values in a hash, formatted using plain text.
-# 
+#
 sub showhashplain {
 	my %myhash;
 	my $maxkey = 0;
 	my $maxval = 0;
 	my $fh = getfh(wantarray);
+	my (%opts, $skipempty, %showfields, $linecut, $divider);
 	
-	print $fh "---------------------------------------\n";
+	# get title
+	if (ref $_[0]) {
+		%myhash = %{$_[0]};
+		%opts = @_[1..$#_];
+		
+		if (defined $opts{'title'})
+			{$divider = '--- ' . $opts{'title'} . ' ---------------------------------'}
+	}
+	
+	if (! defined $divider)
+		{ $divider = '---------------------------------------' }
+	
+	add_indents($fh);
+	print $fh $divider, "\n";
+
+	$divider =~ s|.|\-|gs;
 	
 	# special case: only one element and it's undefined
 	if ( (@_ == 1) && (! defined($_[0])) ) {
-		print
-			"Only element input and it was undefined\n",
-			"---------------------------------------\n\n";
-		return;
+		add_indents($fh);
+		print $fh "Only one element input and it was undefined\n";
+		add_indents($fh);
+		print $fh $divider, "\n\n";
+		
+		ismem($fh) and return $fh->mem();
+		return '';
 	}
-
-	if (ref($_[0]))
-		{%myhash = %{$_[0]}}
-	else
-		{%myhash = @_}
 	
-	foreach my $key (sort(keys(%myhash))) {
-		my $value = $myhash{$key};
-		print $fh $key, ' = ', (defined($value) ? $value : '[undef]'), "\n";
+	# if first element is a reference, assume it's the hash to be displayed
+	if (ref $_[0]){
+		$linecut = $opts{'line_cut'} || $opts{'line_chop'} || $opts{'first_line'};
+		$skipempty = $opts{'skipempty'};
+		
+		if (defined $opts{'showfields'}) {
+			if (ref $opts{'showfields'})
+				{@showfields{@{$opts{'showfields'}}} = ()}
+			else
+				{$showfields{ $opts{'showfields'} } = ()}
+		}
 	}
-
-	print $fh "---------------------------------------\n\n";
 	
-	ref($fh) and return $fh->mem;
+	# else all arguments form hash to be displayed
+	else {
+		%myhash = @_;
+	}
+	
+	# if empty hash
+	if (! keys(%myhash)) {
+		add_indents($fh);
+		print $fh "[empty hash]\n";
+	}
+	
+	# not empty hash
+	else {
+		my ($keywidth, @keys);
+		$keywidth = longestkey(\%myhash);
+		
+		@keys = keys(%myhash);
+		
+		# sort keys unless sort param is sent as false
+		if (default $opts{'sort'}, 1) {
+			@keys = sort { lc($a) cmp lc($b) } @keys;
+		}
+		
+		# @keys = sort { lc($a) cmp lc($b) } @keys;
+
+		KEYLOOP:
+		foreach my $key (@keys) {
+			# if there's a specified list of fields to show
+			if ( %showfields && (! exists $showfields{$key}) )
+				{next KEYLOOP}
+			
+			my $value = $myhash{$key};
+			
+			# if we should skip empty values
+			if (
+				$skipempty &&
+					(
+					(! defined $value) ||
+					($value !~ m|\S|s)
+					)
+				)
+				{next KEYLOOP}
+			
+			# linecut
+			if ($linecut) {
+				if ($value =~ s|[\r\n].*||s)
+					{ $value .= ' [more lines...]' }
+			}
+			
+			add_indents($fh);
+			print $fh
+				spacepad($key, $keywidth), ' = ',
+				define_show($value), "\n";
+		}
+
+	}
+	
+	add_indents($fh);
+	print $fh $divider, "\n\n";
+	
+	ismem($fh) and return $fh->mem();
 	return '';
 }
-# 
+#
 # showhashplain
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
-# showarray
-# 
+#------------------------------------------------------------------------------
+# showarr, showarray
+#
 
-=head1 showarray
+=head2 showarr, showarray
 
-Displays the values of an array.  Each element is displayed in a table row (in web mode) or
-on a separate line (in plain text mode).  Undefined elements are displayed as the
-string C<[undef]>.
+Displays the values of an array.  c<showarr> and c<showarray>
 
-If C<showarray> receives exactly one argument, and if that item is an array reference,
-then the routine assumes that you want to display the elements in the referenced array.
-Therefore, the following blocks of code display the same thing:
+Each element is displayed in a table row (in web mode) or on a separate line
+(in text mode).
+
+If C<showarray> receives exactly one argument, and if that item is an array
+reference, then the routine assumes that you want to display the elements in
+the referenced array. Therefore, the following blocks of code display the
+same thing:
 
    showarray @myarr;
    showarray \@myarr;
@@ -316,10 +738,104 @@ Therefore, the following blocks of code display the same thing:
 =cut
 
 sub showarray {
+	showstuff() or return '';
+	
 	my (@arr) = @_;
 	my $fh = getfh(wantarray);
 	
 	# if first and only element is an array ref, use that as full array
+	if ( (@arr == 1) && UNIVERSAL::isa($arr[0], 'ARRAY') )
+		{@arr = @{$arr[0]}}
+	
+	#------------------------------------------------------
+	# HTML
+	#
+	if (inweb()) {
+		print $fh 
+			qq|<p>\n<table border="4" rules="rows" cellspacing="0" cellpadding="3">\n|,
+			qq|<tr><th bgcolor="#aaaaff">array</th></tr>|;
+		
+		foreach my $el (@arr){
+			print $fh '<tr><td>';
+			
+			if (defined $el){
+				if ($el =~ m|\S|)
+					{ print $fh htmlesc($el) }
+				else
+					{ print $fh '<i>no content string</i>' }
+			}
+			
+			else {
+				print $fh '<i>undefined</i>';
+			}
+			
+			print $fh "</td></tr>\n";
+		}
+		
+		print $fh qq|</table>\n<p>\n|;
+	}
+	#
+	# HTML
+	#------------------------------------------------------
+	
+	
+	#------------------------------------------------------
+	# text
+	#
+	else {
+		my $line = "------------------------------------\n";
+		my ($firstdone);
+		
+		add_indents($fh);
+		print $fh $line;
+		
+		foreach my $el (@arr){
+			add_indents($fh);
+			print $fh define_show($el), "\n";
+			
+			$firstdone = 1;
+		}
+		
+		
+		if (! $firstdone) {
+			add_indents($fh);
+			print $fh "[empty array]\n";
+		}
+		
+		add_indents($fh);
+		print $fh $line;
+	}
+	#
+	# text
+	#------------------------------------------------------
+	
+	ismem($fh) and return $fh->mem();
+}
+
+sub showarr{showarray(@_)}
+#
+# showarr, showarray
+#------------------------------------------------------------------------------
+
+
+
+#------------------------------------------------------------------------------
+# showarrdiv
+#
+
+=head2 showarraydiv
+
+Works just like C<showarray>, except that in text mode displays a solid line between
+each element of the array.
+
+=cut
+
+sub showarraydiv {
+	showstuff() or return '';
+	
+	my (@arr) = @_;
+	my $fh = getfh(wantarray);
+	
 	if ( (@arr == 1) && UNIVERSAL::isa($arr[0], 'ARRAY') )
 		{@arr = @{$arr[0]}}
 	
@@ -351,82 +867,12 @@ sub showarray {
 		print $fh $line;
 		
 		foreach my $el (@arr){
-			if (defined $el)
-				{print $fh $el, "\n"}
-			else
-				{print $fh "[undef]\n"}
+			#if (defined $el)
+			#	{print $fh $el, "\n"}
+			#else
+			#	{print $fh "[undef]\n"}
 			
-			$firstdone = 1;
-		}
-		
-		if (! $firstdone)
-			{print $fh "[empty array]\n", $line}
-		else
-			{print $fh $line}
-	}
-	#
-	# text
-	#------------------------------------------------------
-	
-	ref($fh) and return $fh->mem();
-}
-
-sub showarr{showarray(@_)}
-# 
-# showarray
-#===================================================================================================
-
-
-#===================================================================================================
-# showarrdiv
-# 
-
-=head1 showarraydiv
-
-Works just like C<showarray>, except that in text mode displays a solid line between
-each element of the array.
-
-=cut
-
-sub showarraydiv {
-	my (@arr) = @_;
-	my $fh = getfh(wantarray);
-	
-	if ( (@arr == 1) && UNIVERSAL::isa($arr[0], 'ARRAY') )
-		{@arr = @{$arr[0]}}
-	
-	#------------------------------------------------------
-	# HTML
-	#
-	if ($ENV{'SCRIPT_NAME'}) {
-		print $fh 
-			"<P>\n<TABLE BORDER=4 RULES=ROWS CELLSPACING=0 CELLPADDING=3>\n",
-			"<TR><TH BGCOLOR=\"#AAAAFF\">array</TH></TR>";
-		
-		foreach my $el (@arr)
-			{print $fh '<TR><TD>', htmlesc($el), "</TD></TR>\n"}
-		
-		print $fh "</TABLE>\n<P>\n";
-	}
-	#
-	# HTML
-	#------------------------------------------------------
-	
-	
-	#------------------------------------------------------
-	# text
-	#
-	else {
-		my $line = "------------------------------------\n";
-		my ($firstdone);
-		
-		print $fh $line;
-		
-		foreach my $el (@arr){
-			if (defined $el)
-				{print $fh $el, "\n"}
-			else
-				{print $fh "[undef]\n"}
+			print $fh define_show($el);
 			
 			print $fh $line;
 			$firstdone = 1;
@@ -439,28 +885,33 @@ sub showarraydiv {
 	# text
 	#------------------------------------------------------
 	
-	ref($fh) and return $fh->mem();
+	ismem($fh) and return $fh->mem();
 }
 
 sub showarrdiv{showarraydiv(@_)}
-# 
+#
 # showarraydiv
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
 # showscalar
-# 
+#
 
-=head1 showscalar
+=head2 showscalar
 
-Outputs the value of a scalar.  The name is slightly innaccurate: you can input an array.
-The array will be joined together to form a single scalar.
+Outputs the value of a scalar.  The name is slightly innaccurate: you can
+input an array. The array will be joined together to form a single scalar.
+
+Actually, I hardly ever use C<showscalar>, but it seemed unbalanced to have
+C<showhash> and C<showarray> without C<showscalar>.
 
 =cut
 
 sub showscalar {
+	showstuff() or return '';
+	
 	my (@arr) = @_;
 	my $fh = getfh(wantarray);
 	
@@ -489,10 +940,28 @@ sub showscalar {
 	else {
 		print $fh "------------------------------------\n";
 		
-		if (@arr)
-			{print $fh join('', map {defined($_) ? $_ : '[undef]'} sort({(defined($a) ? $a : '') cmp (defined($b) ? $b : '')} @arr)), "\n"}
-		else
-			{print $fh "[no elements]\n"}
+		if (@arr) {
+			print $fh
+				join(
+					'',
+					map {define_show($_)}
+					
+					sort(
+						{
+							define_show($a) cmp
+							define_show($b)
+						} @arr
+					)
+				),
+				
+				"\n";
+		}
+		
+		# {print $fh join('', map {defined($_) ? $_ : '[undef]'} sort({(defined($a) ? $a : '') cmp (defined($b) ? $b : '')} @arr)), "\n"}
+		
+		else {
+			print $fh "[no elements]\n";
+		}
 		
 		print $fh "------------------------------------\n";
 	}
@@ -500,22 +969,26 @@ sub showscalar {
 	# text
 	#------------------------------------------------------
 	
-	ref($fh) and return $fh->mem();
+	ismem($fh) and return $fh->mem();
 }
 
 sub showsca{showscalar(@_)}
-# 
+#
 # showscalar
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
 # showcgi
-# 
+#
 
-=head1 showcgi
+=head2 showcgi
 
 Displays the CGI parameter keys and values.  This sub always outputs HTML.  
+
+There are several optional parameters, described in the following sections.
+
+B<option:> q
 
 The optional parameter C<q>, may be a CGI query object:
 
@@ -524,6 +997,8 @@ The optional parameter C<q>, may be a CGI query object:
 
 If C<q> is not sent, then a CGI object is created on the fly.
 
+B<option:> skipempty
+
 If the optional parameter C<skipempty> is true:
 
    showcgi skipempty => 1;
@@ -531,37 +1006,65 @@ If the optional parameter C<skipempty> is true:
 then CGI params that are empty (i.e. do not have
 at least one non-space character) are not displayed.
 
+B<option:> skip
+
+C<skip> sets a list of parameters to not display.  For example, if you don't
+want to see the C<choices> or C<toppings> params, then call showcgi like this:
+
+   showcgi skip => ['choices', 'toppings'];
+
+Single item lists can be passed in directly without putting them in
+an anonymous array:
+
+   showcgi skip => 'choices';
+
 =cut
 
 sub showcgi {
-my (%opts) = @_;
-my (@keys, $fh, $q, $skipempty);
+showstuff() or return '';
 
-$q = $opts{'q'} || CGI->new();
+my (%opts) = @_;
+my (@keys, $fh, $q, $skipempty, %skip);
+
+$q = $opts{'r'} || $opts{'q'} || $opts{'cgi'} || CGI->new();
 $skipempty = $opts{'skipempty'};
+
+if (defined $opts{'skip'})
+	{@skip{asarr($opts{'skip'})} = ()}
 
 @keys = sort $q->param;
 $fh = getfh(wantarray);
 
 print $fh STDTABLE;
 
+# title
+print $fh <<"(TABLETITLE)";
+<tr style="background-color:yellow">
+<th style="color:black" colspan="3">CGI params</th>
+</tr>
+(TABLETITLE)
+
+
 # special case: no elements
 if (! @keys) {
-	print $fh "<TR><TD>No params</TD></TR></TABLE>\n";
+	print $fh "<tr><td>No params</td></tr></table>\n";
 	return;
 }
 
 print $fh <<"(TABLETOP2)";
-<TR BGCOLOR=NAVY>
-<TH STYLE="color:white">key</TH>
-<TD>&nbsp;&nbsp;&nbsp;</TD>
-<TH STYLE="color:white">value</TH>
-</TR>
+<tr style="background-color:navy">
+<th style="color:white">key</th>
+<td>&nbsp;&nbsp;&nbsp;</td>
+<th style="color:white">value</th>
+</tr>
 (TABLETOP2)
 
 PARAMLOOP:
 foreach my $key (@keys){
 	my @vals = $q->param($key);
+	
+	if (exists $skip{$key})
+		{next PARAMLOOP}
 	
 	if ($skipempty && @vals <= 1) {
 		my $val = $vals[0];
@@ -571,21 +1074,21 @@ foreach my $key (@keys){
 	}
 	
 	print $fh 
-		'<TR VALIGN="top"><TD>',
+		'<tr valign="top"><td>',
 		htmlesc($key),
-		'</TD><TD></TD><TD>';
+		'</td><td></td><td>';
 	
 	if (@vals > 1) {
 		print $fh STDTABLE;
 		
 		foreach my $val (@vals) {
 			print $fh
-				'<TR><TD>',
+				'<tr><td>',
 				htmlesc($val),
-				"</TD></TR>\n";
+				"</td></tr>\n";
 		}
 		
-		print "</TABLE>\n";
+		print "</table>\n";
 	}
 	
 	else {
@@ -593,27 +1096,27 @@ foreach my $key (@keys){
 			htmlesc($vals[0]);
 	}
 	
-	print $fh "</TD></TR>\n";
+	print $fh "</td></tr>\n";
 }
 
-print $fh "</TABLE>\n<P>\n";
+print $fh "</table>\n<p>\n";
 
-ref($fh) and return $fh->mem;
+ismem($fh) and return $fh->mem;
 return '';
 }
-# 
+#
 # showcgi
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
 # showref
-# 
+#
 
-=head1 showref($ref, %options)
+=head2 showref($ref, %options)
 
-Displays a hash, array, or scalar references, treeing down through other references it contains.  
-So, for example, the following code:
+Displays a hash, array, or scalar references, treeing down through other
+references it contains.  So, for example, the following code:
 
  my $ob = {
     name    => 'Raha',
@@ -639,17 +1142,18 @@ produces the following output:
    name = Raha
    \-----------------------------------------------------------/
 
-The values of the hash or arrays being referenced are only displayed once, so you're safe from
-infinite recursion. 
+The values of the hash or arrays being referenced are only displayed once, so
+you're safe from infinite recursion. 
 
 There are several optional parameters, described in the following sections.
 
 =head2 maxhash
 
-The C<maxhash> option allows you to indicate the maximum number of hash elements to display.  
-If a hash has more then C<maxhash> elements then none of them are displayed or recursed through,
-and instead an indicator of how many elements there are is output.  So, for example, the following
-command only displays the hash values if there are 10 or fewer elements in the hash:
+The C<maxhash> option allows you to indicate the maximum number of hash
+elements to display.  If a hash has more then C<maxhash> elements then none of
+them are displayed or recursed through, and instead an indicator of how many
+elements there are is output.  So, for example, the following command only
+displays the hash values if there are 10 or fewer elements in the hash:
 
    showref $myob, maxhash=>10;
    
@@ -658,30 +1162,41 @@ If C<maxhash> is not sent then there is no maximum.
 
 =head2 maxarr
 
-The C<maxarr> option allows you to indicate the maximum number of array elements to display.  If
-an array has more then C<maxarr> elements then none of them are displayed or recursed through, and
-instead an indicator of how many elements there are is output.  If C<maxarr> is not sent then
-there is no maximum.
+The C<maxarr> option allows you to indicate the maximum number of array
+elements to display.  If an array has more then C<maxarr> elements then none
+of them are displayed or recursed through, and instead an indicator of how
+many elements there are is output.  If C<maxarr> is not sent then there is no
+maximum.
 
 
 =head2 depth
 
-The C<depth> option allows you to indicate a maximum depth to display in the tree.
-If C<depth> is not sent then there is no maximum depth.
+The C<depth> option allows you to indicate a maximum depth to display in the
+tree. If C<depth> is not sent then there is no maximum depth.
 
+=head2 skip
+
+A list of hash elements to skip.  Only applies to the top element and only if
+it is a hash.
+
+=head2 skipall
+
+Works the same as C<skip>, but applies to all hashes in the structure, not
+just the top-level hash.
 
 =cut
 
 sub showref {
+	showstuff() or return '';
+	
 	my ($ref, %opts) = @_;
 	my ($indentnum, $indent, $type, $tab, %skip, $finalfh);
 	my $fh = $opts{'fh'} || getfh(wantarray);
 	
+	
 	# hash of keys to skip
-	if (defined $opts{'skip'}) {
-		$skip{$_} = 1 for asarr($opts{'skip'});
-		delete $opts{'skip'};
-	}
+	@skip{asarr(delete $opts{'skip'})} = ();
+	@skip{asarr($opts{'skipall'})} = ();
 	
 	# set some variables
 	$indentnum = $opts{'indent'};
@@ -693,9 +1208,9 @@ sub showref {
 	$type = "$ref";
 	$type =~ s|^[^\=]*\=||;
 	$type =~ s|\(.*||;
-
+	
 	if (inweb())
-		{print $fh "<PRE>\n"}
+		{print $fh qq|<pre style="text-align:left;">\n|}
 	
 	if (! $indent)
 		{print $fh "/----------------------------------------------------------------------------\\\n"}
@@ -723,7 +1238,7 @@ sub showref {
 			
 			ELLOOP:
 			while ( my($n, $v) = each(%{$ref}) ) {
-				$skip{$n} and next ELLOOP;
+				exists($skip{$n}) and next ELLOOP;
 				
 				print $fh $indent, $n, ' = ';
 				
@@ -740,10 +1255,15 @@ sub showref {
 					else 
 						{print $fh $v}
 				}
-				elsif (defined $v)
-					{print $fh $v, "\n"}
-				else
-					{print $fh "[undef]\n"}
+				
+				#elsif (defined $v)
+				#	{print $fh $v, "\n"}
+				#else
+				#	{print $fh "[undef]\n"}
+				
+				else {
+					print $fh define_show($v);
+				}
 			}
 		}
 	}
@@ -767,7 +1287,7 @@ sub showref {
 							{print $fh $indent, $tab, '[redundant]'}
 						else {
 							$opts{'done'}->{$v} = 1;
-
+							
 							if ($firstdone)
 								{print $fh "\n"}
 							else
@@ -780,45 +1300,55 @@ sub showref {
 						{print $fh $indent, $tab, $v}
 				}
 				
-				elsif (defined $v)
-					{print $fh $indent, $tab, $v, "\n"}
-				else
-					{print $fh $indent, $tab, "[undef]\n"}
+				#elsif (defined $v)
+				#	{print $fh $indent, $tab, $v, "\n"}
+				#else
+				#	{print $fh $indent, $tab, "[undef]\n"}
+				
+				else {
+					print $fh $indent, $tab, define_show($v), "\n"
+				}
+
 			}
 		}
 	}
-
+	
 	if (! $indent)
 		{print $fh "\\----------------------------------------------------------------------------/\n\n"}
 	
 	if (inweb())
-		{print $fh "</PRE>\n"}
+		{print $fh "</pre>\n"}
 	
-	ref($fh) and return $fh->mem();
+	ismem($fh) and return $fh->mem();
 }
 # 
 # showref
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
 # getfh
-# 
-# Private sub.  Returns a file handle that is either STDOUT or STDERR (depending 
+#
+# Private sub.  Returns a file handle that is either STDOUT or STDERR (depending
 # on the value of the global variable $Debug::ShowStuff::out), or a MemHandle
 # object that will be used to return a string to the caller of the function
 # that called getfh.
-# 
+#
 sub getfh {
 	my ($wa) = @_;
 	my ($fh);
+	
+	# if explicit context
+	if (defined $always_void)
+		{ undef $wa ;}
 	
 	# if called in void context, outputs to STDOUT,
 	# otherwise returns string
 	if (defined $wa) {
 		require MemHandle;
-	    $fh = MemHandle->new;
+	    $fh = MemHandle->new('');
 	}
+	
 	else
 		{$fh = $out}
 	
@@ -826,133 +1356,402 @@ sub getfh {
 }
 # 
 # getfh
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
-# asarr
+#------------------------------------------------------------------------------
+# ismem
+#
+# This private function returns true if the given file handle
+# is a MemHandle filehandle.
+#
+sub ismem {
+	return UNIVERSAL::isa($_[0], 'MemHandle');
+}
+#
+# ismem
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# spacepad
+#
+# This private function returns the given string padded with
+# the indicated number of spaces.  The spaces are added to the right
 # 
+sub spacepad {
+	my ($str, $width) = @_;
+	return sprintf("%-${width}s", $str);
+}
+#
+# spacepad
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# longestkey
+#
+# This private function returns the length of the longest key
+# in the given hash.  Only pass in hash references, not hashes.
+#
+sub longestkey {
+	my ($hash) = @_;
+	my $max = 0;
+	
+	foreach my $key (keys %$hash) {
+		if (length($key) > $max)
+			{ $max = length($key) }
+	}
+	
+	return $max;
+}
+#
+# longestkey
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# asarr
+#
 # Private function.  Allows an optional argument to be passed as
 # either an array reference or as a single item.  Always returns
 # an array reference in scalar context and an array in array context.
-# 
+#
 sub asarr {
 	my $arg = shift;
 	my @rv;
 	
 	if (ref $arg)
 		{@rv = @$arg}
-	else
+	elsif (defined $arg)
 		{@rv = $arg}
 	
 	wantarray and return @rv;
 	return \@rv;
 }
-# 
+#
 # asarr
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
-# println
-# 
+#------------------------------------------------------------------------------
+# printhr
+#
 
-=head1 println
+=head2 printhr
 
-In general, works just like C<print>, but adds a newline to the output.
+Prints a horizontal rule.  Handy for dividing up multiple println's.
 
-If C<println> is called with no arguments, it simply outputs a newline.
-If C<println> is called with exactly one argument, and that argument
-is the undefined value, then C<println> outputs "[undef]".  If it is 
-called with multiple arguments, and one or more of them is undefined,
-then, in normal Perl manner, those undefined's become empty strings
-and a warning it output (because, of course, you DO have warnings
-turned on, right?).
+In text mode, the horizontal rule is a set of 80 dashes.
 
-When C<println> is called in web mode, all arguments are HTML escaped.  
-Furthermore, the entire output is enclosed in a C<E<lt>PE<gt>> element 
-so that the output is in a paragraph by itself.  The C<E<lt>PE<gt>> element
-is given a CSS style so that regardless of the background color and 
-font color of the web page, the values sent to C<println> are
-displayed with a white background and black text.
+In web mode, the output is an <hr> tag, unless the C<title> option is sent,
+in which case the output is C<p> element with the title as the content. The
+<p> element has a gray background and a black border.
+
+=head2 option: title
+
+If the C<title>option is sent, the titleis embedded in the horizontal rule.
 
 =cut
 
-sub println {
-	my (@rv, $str);
+sub printhr {
+	showstuff() or return '';
+	my (%opts, $title);
 	my $fh = getfh(wantarray);
-	my $i=0;
+	
+	# single argument: title
+	if (@_ == 1) {
+		$title = $_[0];
+	}
+	else {
+		%opts = @_;
+		$title = $opts{'title'} || $opts{'msg'};
+	}
+	
+	if (inweb()) {
+		if (defined $title) {
+print $fh <<"(HTML)";
+<p
+	style="
+		background-color: #cccccc;
+		border: 1px solid black;
+		color: black;
+		padding: 4px;
+		font-weight: bold;
+		font-size: 8pt;
+		-moz-border-radius: 5px;
+		-webkit-border-radius: 5px;
+	">
+@{ [ htmlesc($title) ] }
+</p>
+(HTML)
+		}
+		
+		else {
+			print $fh "<hr>\n";
+		}
+	}
+	
+	else {
+		# set dash
+		my $dash = default($opts{'dash'}, '-');
+		
+		add_indents($fh);
+		
+		if (defined $title) {
+			print $fh
+				($dash x 3),
+				" $title ",
+				($dash x (75 - length($title))),
+				"\n";
+		}
+		
+		else {
+			print $fh ($dash x 80), "\n";
+		}
+	}
+}
+#
+# asarr
+#------------------------------------------------------------------------------
 
+
+
+#------------------------------------------------------------------------------
+# add_indents
+#
+# Privae function
+#
+sub add_indents {
+	my ($fh) = @_;
+	
+	for (1..$indent_level) {
+		print $fh $indent_tab;
+	}
+}
+#
+# add_indents
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# printnorm
+#
+
+=head2 printnorm
+
+Works like println but doesn't add trailing newline.  In web environment uses
+<span> instead of <p>.
+
+=cut
+
+sub printnorm {
+	showstuff() or return '';
+	
+	my ($str);
+	my $fh = getfh(wantarray);
+	
 	# special case: no arguments: just output an eol and return
 	if (! @_) {
-		print "\n";
+		print $fh "\n";
 		return;
 	}
 	
-	while ($i<=$#_)
-		{push @rv, $_[$i++]}
+	# $str = join('', map {defined($_) ? $_ : '[undef]'} @_);
+	$str = join('', map {define_show($_)} @_);
 	
-	if ( (@rv <= 1) && (! defined $rv[0]) )
-		{@rv = '[undef]'}
 	
-	$str = join('', @rv);
+	if (inweb()) {
+		print $fh '<span style="background-color:white;color:black;text-align:left">', htmlesc($str), "</span>";
+	}
+	else {
+		add_indents($fh);
+		print $fh $str;
+	}
 	
-	if (inweb())
-		{print $fh '<P STYLE="background-color:white;color:black">', htmlesc($str), "</P>\n"}
-	else
-		{print $fh $str, "\n"}
+	ismem($fh) and return $fh->mem();
 }
-# 
-# println
-#===================================================================================================
+#
+# printnorm
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
+# printval
+#
+# I don't even remember what this function is for, so for now I'm commenting
+# it out.
+#
+# sub printval {
+# 	showstuff() or return '';
+# 	
+# 	my ($val) = @_;
+# 	my $fh = getfh(wantarray);
+# 	
+# 	# get value to print
+# 	$val = define_show($val);
+# 	
+# 	if (inweb())
+# 		{ $val = htmlesc($val) }
+# 	
+# 	print $fh $val;
+# 	
+# 	ismem($fh) and return $fh->mem();
+# }
+#
+# printval
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# preln
+#
+
+=head2 preln
+
+Outputs the given values inside a <pre> element.  Always outputs HTML.
+
+=cut
+
+sub preln {
+	showstuff() or return '';
+	
+	my ($str);
+	my $fh = getfh(wantarray);
+	
+	# special case: no inputs
+	if (! @_ )
+		{$str = '<i>empty</i>'}
+	
+	# special case: just one element and it's undefined
+	elsif ( (@_ == 1) && (! defined $_[0]) )
+		{$str = '<i>undefined</i>'}
+	
+	# else lump them all together
+	else
+		{$str = htmlesc(join('', @_))}
+	
+	print $fh
+		'<pre style="background-color:white;color:black;text-align:left;border:gray solid 1px;margin:3px;padding:3px; font-size:16px;">',
+		$str,
+		"</pre>\n";
+	
+	ismem($fh) and return $fh->mem();
+}
+#
+# preln
+#------------------------------------------------------------------------------
+
+
+
+#------------------------------------------------------------------------------
 # dieln
-# 
+#
 
-=head1 dieln
+=head2 dieln
 
-Works just like the C<die> command, except it always adds an end-of-line to the input
-array so you never get those "at line blah-blah-blah" additions.
+Works just like the C<die> command, except it always adds an end-of-line to
+the input array so you never get those "at line blah-blah-blah" additions.
 
 =cut
 
 sub dieln {
-	die @_, "\n";
+	my ($str);
+	$str = join('', map {define_show($_)} @_);
+	
+	die $str . "\n";
 }
-# 
+#
 # dieln
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
+# diearr
+#
+
+=head2 diearr
+
+Displays an array, then dies using C<dieln>.
+
+=cut
+
+sub diearr {
+	my $err = shift;
+	showarr @_;
+	dieln $err;
+}
+#
+# diearr
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
 # pressenter
-# 
+#
 
-=head1 pressenter
+=head2 pressenter
 
-For use at the command line.  Outputs a prompt to "press enter to continue", then waits
-for you to do exactly that.
+For use at the command line.  Outputs a prompt to "press enter to continue",
+then waits for you to do exactly that.
 
 =cut
 
 sub pressenter {
-	print 'press enter to continue';
+	my ($msg) = @_;
+	$msg ||= 'press enter to continue';
+	$msg =~ s|\s*$| |s;
+	
+	print $msg;
 	<STDIN>;
 }
 # 
 # pressenter
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
-#===================================================================================================
-# httpheader
+#------------------------------------------------------------------------------
+# confirm
+#
+
+=head2 confirm
+
+Prompts the user for a y or n.  Exits quietly if y is pressed.
+
+=cut
+
+sub confirm {
+	my ($msg) = @_;
+	$msg ||= 'continue?';
+	$msg =~ s|\s*$| |s;
+	
+	RESPONSELOOP:
+	while (1) {
+		my ($response);
+		
+		print $msg;
+		$response = <STDIN>;
+		$response =~ s|^\s*(.).*|$1|s;
+		$response = lc($response);
+		
+		if ($response eq 'y')
+			{ return 1 }
+		elsif ($response eq 'n')
+			{ exit }
+	}
+}
 # 
+# confirm
+#------------------------------------------------------------------------------
 
-=head1 httpheader
 
-Outputs an HTTP header.
+#------------------------------------------------------------------------------
+# httpheader
+#
+
+=head2 httpheader
+
+Outputs a text/html HTTP header.  Not useful if you're using mod_perl.
 
 =cut
 
@@ -967,74 +1766,129 @@ sub httpheader {
 }
 
 sub httpheaders{return httpheader(@_)}
-# 
+#
 # header
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
 # showstderr
-# 
+#
 
-=head1 showstderr
+=head2 showstderr
 
 This function allows you to see, in the web page produced by a CGI, everything
 the CGI output to STDERR. 
 
-To use C<showstderr>, assign the return value of the function to a variable that is scoped
-to the entire CGI script:
+To use C<showstderr>, assign the return value of the function to a variable
+that is scoped to the entire CGI script:
 
   my $stderr = showstderr();
 
-You need not do anything more with that variable.  The object reference by your variable holds
-on to everything output to both STDOUT and STDERR.  When the variable goes out of scope, the 
-object outputs the STDOUT content with the STDERR content at the top of the web page.
+You need not do anything more with that variable.  The object reference by
+your variable holds on to everything output to both STDOUT and STDERR.  When
+the variable goes out of scope, the object outputs the STDOUT content with the
+STDERR content at the top of the web page.
 
 =cut
 
 sub showstderr {
 	return Debug::ShowStuff::ShowStdErr->new(@_);
 }
-# 
+#
 # showstderr
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
 # inweb
-# 
-=head1 inweb
+#
+=head2 inweb
 
 Returns a guess on if we're in a web environment.  The guess is pretty simple:
 if the environment variable C<REQUEST_URI> is true (in the Perlish sense)
 then this function returns true.
 
-If the global C<$Debug::ShowStuff::forceplain> is true, this function always
-returns false.
+If the global C<$Debug::ShowStuff::forceweb> is defined, this function
+returns the value of C<$Debug::ShowStuff::forceweb>.
 
 =cut
 
 sub inweb {
-	$forceplain and return 0;
-	return $ENV{'REQUEST_URI'};
+	if (defined $forceweb)
+		{ return $forceweb }
+	
+	return ($ENV{'REQUEST_URI'} || $ENV{'SERVER_NAME'});
 }
-# 
+#
 # inweb
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
 
-#===================================================================================================
+#------------------------------------------------------------------------------
+# output_to_file
+#
+
+=head2 output_to_file($path)
+
+Sends Debug::ShowStuff output to a file instead of to STDOUT or STDERR.  The
+value of this function MUST be assigned to a variable or it has not effect.
+Don't do anything with the returned value... it is NOT a file handle.  The
+returned value is an object that, when it goes out of scope, closes the output
+file handle.
+
+For example, the following code will output to three files names
+Larry.txt, Curly.txt, and Moe.txt:
+
+ foreach my $name (qw[Larry Curyl Moe]) {
+    my $output = output_to_file("$name.txt");
+    println $name;
+    println 'length: ', length($name);
+ }
+
+=cut
+
+sub output_to_file {
+	my ($path) = @_;
+	my ($fh, $closer);
+	
+	if (! defined wantarray) {
+		my $msg =
+			"Do not call outputfile in void context.  Save the return value to a scalar.\n" .
+			"REMINDER: The return value is NOT a filehandle, it is just an object that, when\n" .
+			"it goes out of scope, closes the global filehandle.\n";
+		
+		croak $msg;
+	}
+	
+	require FileHandle;
+	
+	$fh = FileHandle->new(">$path");
+	$fh->autoflush(1);
+	
+	setoutput($fh);
+	
+	$closer = Debug::ShowStuff::CloseGlobalHandle->new($fh);
+	return $closer;
+}
+#
+# output_to_file
+#------------------------------------------------------------------------------
+
+
+
+#------------------------------------------------------------------------------
 # setoutput
-# 
+#
 
-=head1 setoutput
+=head2 setoutput
 
-Sets the default output handle.  By default, routines in C<Debug::ShowStuff> output
-to STDOUT.  With this command you can set the default output to STDERR, or back
-to STDOUT.  The following command sets default output to STDERR:
+Sets the default output handle.  By default, routines in C<Debug::ShowStuff>
+output to STDOUT.  With this command you can set the default output to STDERR,
+or back to STDOUT.  The following command sets default output to STDERR:
 
    setoutput 'stderr';
 
@@ -1042,66 +1896,537 @@ This command sets output back to STDOUT:
 
    setoutput 'stdout';
 
-When default output is set to STDERR then the global 
-C<$Debug::ShowStuff::forceplain> is set to true, which means that 
-functions in this module always output in text mode, not web 
-mode.
+When default output is set to STDERR then the global
+C<$Debug::ShowStuff::forceplain> is set to true, which means that functions in
+this module always output in text mode, not web mode.
 
 =cut
 
 sub setoutput {
 	my ($outname) = @_;
 	
+	# filehandle
+	if ( UNIVERSAL::isa($outname, 'FileHandle') ) {
+		$out = $outname;
+		$forceweb = 0;
+	}
+	
 	# STDOUT
-	if (lc($outname) eq 'stdout') {
+	elsif (lc($outname) eq 'stdout') {
 		$out = *STDOUT;
-		undef $forceplain;
+		undef $forceweb;
 	}
 	
 	# STDERR
 	elsif (lc($outname) eq 'stderr') {
 		$out = *STDERR;
-		$forceplain = 1;
+		$forceweb = 0;
 	}
 	
 	# else don't know
 	else
 		{croak "do not know this type of output: $outname"}
 }
-# 
+#
 # setoutput
-#===================================================================================================
+#------------------------------------------------------------------------------
 
 
 
-#===================================================================================================
-# nullfix
-# 
+#------------------------------------------------------------------------------
+# fixundef
+#
 
-=head1 nullfix
+=head2 fixundef
 
 Takes a single argument.  If that argument is undefined, returns an
 empty string.  Otherwise returns the argument exactly as it is.
 
 =cut
 
-sub nullfix {
+sub fixundef {
 	defined($_[0]) or return '';
 	return $_[0];
 }
-# 
-# nullfix
-#===================================================================================================
+#
+# fixundef
+#------------------------------------------------------------------------------
 
 
-######################################################################################################
+#------------------------------------------------------------------------------
+# findininc
+#
+
+=head2 findininc
+
+Given one or more file names, searches @INC for where they are located.
+Returns an array of full file names.
+
+=cut
+
+sub findininc {
+	my (@filenames) = @_;
+	my (@rv);
+	
+	foreach my $dir (@INC) {
+		foreach my $filename (@filenames) {
+			my $path = "$dir/$filename";
+			
+			if (-e $path)
+				{push @rv, $path}
+		}
+	}
+	
+	if (! defined(wantarray))
+		{showarr @rv}
+	else
+		{return @rv}
+}
+#
+# findininc
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# define_show
+#
+# Private function.  If the given value is undef, returns the string "[undef]".
+# If it is an empty string, returns "[empty string]". Otherwise the original
+# string is returned.
+#
+use overload;
+
+sub define_show {
+	my ($val) = @_;
+	
+	# if overloaded object, get return value and
+	# concatenate with string (which defines it).
+	if (ref $val) {
+		if (my $func = overload::Method($val, '""'))
+			{ $val = &$func($val) }
+	}
+	
+	if (defined $val) {
+		if ($val eq '')
+			{ $val = '[empty string]' }
+	}
+	
+	else {
+		$val = '[undef]';
+	}
+	
+	return $val;
+}
+#
+# define_show
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# showtainted
+#
+
+=head2 showtainted(@values)
+
+Given an array of values, shows which are tainted and which are not.  If the
+first argument is a hashref, displays the tainted status of each element value.
+
+=cut
+
+sub showtainted {
+	my (@vals) = @_;
+	require Taint;
+	
+	# if first value is a hashref, show as hash
+	if (UNIVERSAL::isa $vals[0], 'HASH') {
+		my $hashref = $vals[0];
+		my $show = {};
+		
+		while ( my($key, $val) = each(%$hashref) ) {
+			my ($tainted);
+			
+			if (Taint::tainted($val))
+				{ $tainted = 'tainted' }
+			else
+				{ $tainted = 'not tainted' }
+			
+			$show->{$key} = $tainted;
+		}
+		
+		showhash $show;
+	}
+	
+	# loop through values
+	else {
+		foreach my $val (@vals) {
+			my ($tainted);
+			
+			if (Taint::tainted($val))
+				{ $tainted = 'tainted:     ' }
+			else
+				{ $tainted = 'not tainted: ' }
+			
+			$val = "$tainted$val";
+		}
+		# show values
+		showarr @vals;
+	}
+}
+#
+# showtainted
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# showsth
+#
+
+=head2 showsth
+
+Outputs a  table of all rows in the given DBI statement handle.  Note that
+this function "uses up" the statement handle.
+
+NOTE: The text mode version of this function has not been fully implemented.
+
+=cut
+
+sub showsth {
+	showstuff() or return '';
+	
+	if (inweb())
+		{ return showsth_web(@_) }
+	else
+		{ return showsth_text(@_) }
+}
+#
+# showsth
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# showsth_text
+#
+# Private subroutine. Text version of the system for showing a statement
+# handle.
+#
+# NOTE: This subroutine has not been fully implemented.
+#
+sub showsth_text {
+	my ($sth, %opts) = @_;
+	my (@field_defs, @records, $full_row);
+	my $fh = getfh(wantarray);
+	
+	# build hash of field names
+	foreach my $field_name (@{$sth->{'NAME'}}) {
+		my $def = {};
+		push @field_defs, $def;
+		
+		# hold on to name
+		$def->{'name'} = $field_name;
+		
+		# hold on to max length
+		$def->{'max_length'} = length($field_name);
+	}
+	
+	# loop through statement handle collecting fields
+	while (my $row = $sth->fetchrow_hashref) {
+		my $row_norm = {};
+		
+		# get max lengths
+		foreach my $def (@field_defs) {
+			my $val = $row->{$def->{'name'}};
+			$val = define_show($val);
+			
+			# set maximum length
+			if ( $def->{'max_length'} < length($val) )
+				{ $def->{'max_length'} = length($val) }
+			
+			# normalized field value
+			$row_norm->{$def->{'name'}} = $val;
+		}
+		
+		push @records, $row_norm;
+	}
+	
+	# begin header row
+	$full_row = '+';
+	
+	# output headers
+	foreach my $def (@field_defs) {
+		my $field_name = uc $def->{'name'};
+		
+		while (length($field_name) < $def->{'max_length'})
+			{ $field_name .= '-' }
+		
+		$full_row .= '-' . $field_name . '-+';
+	}
+	
+	# close header row
+	add_indents($fh);
+	print $fh "$full_row\n";
+	
+	# output records
+	foreach my $record (@records) {
+		add_indents($fh);
+		print $fh '|';
+		
+		# output each field
+		foreach my $def (@field_defs) {
+			my $val = $record->{$def->{'name'}};
+			
+			# space pad
+			while ( length($val) < $def->{'max_length'} )
+				{ $val .= ' ' }
+			
+			print $fh ' ', $val, ' |';
+		}
+		
+		# close row
+		print $fh "\n";
+	}
+	
+	# bottom row
+	$full_row =~ s|[^+]|-|gs;
+	add_indents($fh);
+	print $fh "$full_row\n";
+	
+	# success
+	return '';
+}
+#
+# showsth_text
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# showsth_web
+#
+sub showsth_web {
+	my ($sth, %opts) = @_;
+	my ($first_row_done, %field_names, $formats);
+	tie %field_names, 'Tie::IxHash';
+	$formats = $opts{'formats'} || {};
+	
+	# get headers that are to be output first
+	if ($opts{'headers'}) {
+		foreach my $field_name (@{$opts{'headers'}})
+			{ undef $field_names{$field_name} }
+	}
+	
+	# open table
+print <<'(HTML)';
+<table border="1" cellpadding="3">
+(HTML)
+	
+	# output title if available
+	if (defined $opts{'title'}) {
+		print
+			'<tr style="background-color:navy; color:white; text-align:left;">',
+			'<th colspan="',
+			scalar(@{$sth->{'NAME'}}),
+			'">',
+			$opts{'title'},
+			"</th></tr>\n";
+	}
+	
+	# loop through records
+	while (my $row = $sth->fetchrow_hashref) {
+		if (! $first_row_done) {
+			# build list of headers
+			foreach my $field_name (@{$sth->{'NAME'}}) {
+				if (! exists $field_names{$field_name})
+					{ undef $field_names{$field_name} }
+			}
+			
+			# open table and header row
+print <<'(HTML)';
+<thead>
+<tr valign="top" style="background-color:#99ccff; color:black; text-align:left;">
+(HTML)
+			
+			# output headers
+			foreach my $field_name (keys %field_names) {
+				print '<th>', htmlesc($field_name), "</th>\n";
+			}
+			
+			# close header row
+print <<'(HTML)';
+		</tr>
+	</thead>
+	<tbody>
+(HTML)
+			
+			# note table headers have been output
+			$first_row_done = 1;
+		}
+		
+		# open row
+		print '<tr style="background-color:white; color:black; text-align:left; vertical-align:top;">';
+		
+		# loop through fields
+		foreach my $field_name (keys %field_names) {
+			my ($value, $format);
+			$value = $row->{$field_name};
+			$format = $formats->{$field_name} || {};
+			
+			# <td>
+			if ($format->{'align'})
+				{ print qq|<td align="$format->{'align'}">| }
+			else
+				{ print '<td>' }
+			
+			if (defined $value) {
+				if ($value eq '') {
+					print '<i>[empty string]</i>';
+				}
+				
+				else {
+					my $output = htmlesc($value);
+					
+					# pre
+					if ($format->{'pre'}) {
+						$output =~ s|\t|    |gs;
+						$output = "<pre>$output</pre>";
+					}
+					
+					print $output;
+				}
+			}
+			
+			else {
+				print '<i>[undef]</i>';
+			}
+			
+			print "</td>\n";
+		}
+		
+		# close row
+		print "</tr>\n";
+	}
+	
+	# close table or mention that there were no records
+	if ($first_row_done) {
+		print qq|</tbody>\n|;
+	}
+	
+	else {
+		print qq|</thead><tbody><tr><td>no records</td></tr>\n</tbody>\n|;
+	}
+	
+	print qq|<table>\n|;
+}
+#
+# showsth_web
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# indent
+#
+
+=head2 indent
+
+C<indent()> is for situations where you're outputting a lot of stuff and you
+want to tidy up the list by indenting some of the output.  Currently
+C<indent()> only has an effect in text mode.  It does nothing in web mode.
+
+C<indent()> b<must be assigned to a variable> or it has no effect.  C<indent()>
+increases the indent level by one.  When the variable goes out of scope, the
+indent level is decreased by one.
+
+For example suppose you want to display the values of records from a database.
+You might loop through the records, outputting them like this:
+
+ while (my $record = $sth->fetchrow_hashref) {
+    println $record->{'name_nick'};
+    my $indent = indent();
+    showhash $record;
+ }
+
+That would produce output something like this:
+
+ Ricky
+   ---------------------------------------
+   name_first  = Rick
+   name_last   = Adams
+   name_middle = Horatio
+   name_nick   = Ricky
+   salary      = $15,000
+   ---------------------------------------
+
+ Dan
+   ---------------------------------------
+   name_first  = Daniel
+   name_last   = Bradley
+   name_middle = [undef]
+   name_nick   = Dan
+   salary      = $250,000
+   ---------------------------------------
+
+By default, three spaces are used to indent. To change that set
+$Debug::ShowStuff::indent_tab to whatever string you want to use for
+indentation.
+
+=head2 option: bottom_space
+
+The C<bottom_space> option indicates to output an extra line at the bottom
+of the indented output, just to give some extra division before the next
+batch of code.  For example, the following code does not use C<bottom_space>:
+
+ foreach my $name (qw[Larry Moe]) {
+    println $name;
+    my $indent = indent(bottom_space=>1);
+    println 'length: ', length($name);
+ }
+
+and so produces the following output:
+
+ Larry
+    length: 5
+ Moe
+    length: 3
+
+But this code:
+
+ foreach my $name (qw[Larry Moe]) {
+    println $name;
+    my $indent = indent(bottom_space=>1);
+    println 'length: ', length($name);
+ }
+
+produces this output:
+
+ Larry
+    length: 5
+
+ Moe
+    length: 3
+
+
+=cut
+
+sub indent {
+	my (%opts) = @_;
+	$indent_level++;
+	return Debug::ShowStuff::Indent->new(%opts);
+}
+#
+# indent
+#------------------------------------------------------------------------------
+
+
+
+###############################################################################
+# ShowStdErr
+#
 package Debug::ShowStuff::ShowStdErr;
 require 5.005;
 use strict;
 
+
 #---------------------------------------------------------------------------
 # new
-# 
+#
 sub new {
 	my ($class, %opts) = @_;
 	my $self = bless({}, $class);
@@ -1113,8 +2438,11 @@ sub new {
 	# default certain properties based on html
 	if ($opts{'html'}) {
 		defined($opts{'flushtostderr'}) or $opts{'flushtostderr'} = 1;
-		defined($opts{'stderrfirst'})    or $opts{'stderrfirst'} = 1;
+		defined($opts{'stderrfirst'})   or $opts{'stderrfirst'} = 1;
 	}
+	
+	# default to output STDERR first
+	$opts{'stderrfirst'} = exists($opts{'stderrfirst'}) ? $opts{'stderrfirst'} : 1;
 	
 	# other properties
 	$self->{'html'} = $opts{'html'};
@@ -1145,14 +2473,14 @@ sub new {
 	
 	return $self;
 }
-# 
+#
 # new
 #---------------------------------------------------------------------------
 
 
 #---------------------------------------------------------------------------
 # displaystderr
-# 
+#
 sub displaystderr {
 	my ($self) = @_;
 	
@@ -1195,14 +2523,14 @@ sub displaystderr {
 	}
 
 }
-# 
+#
 # displaystderr
 #---------------------------------------------------------------------------
 
 
-#---------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # DESTROY
-# 
+#
 DESTROY {
 	my ($self) = @_;
 	
@@ -1254,8 +2582,8 @@ DESTROY {
 			# to work quite right
 			# ($headers, $stdout) = split(m/(\r\n\r\n)/s, $stdout, 2);
 			$headers = $stdout;
-			$headers =~ s/((\r\n\r\n)|(\n\n)|(\r\r)).*//s;
-			$stdout = substr($stdout, length($headers) + length($2));
+			$headers =~ s/((?:\r\n\r\n)|(?:\n\n)|(?:\r\r)).*//s;
+			$stdout = substr($stdout, length($headers) + length($1));
 			
 			# output headers
 			print $headers, "\n\n";
@@ -1281,14 +2609,21 @@ DESTROY {
 	# display data
 	#------------------------------------------------
 
-
 }
-# 
+#
 # DESTROY
-#---------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 
-######################################################################################################
+#
+# ShowStdErr
+###############################################################################
+
+
+
+###############################################################################
+# HandleOb
+#
 package Debug::ShowStuff::ShowStdErr::HandleOb;
 use strict;
 use Carp;
@@ -1340,12 +2675,134 @@ sub readwarning {
 	carp "Cannot read from specified filehandle.";
 }
 
+#
+# HandleOb
+###############################################################################
+
+
+
+###############################################################################
+# CloseGlobalHandle
+#
+# Private function.
+# Objects in this class automatically undefs Debug::ShowStuff::out if it is
+# a FileHandle object;
+#
+# Objects in this class are used by the function output_to_file().
+#
+package Debug::ShowStuff::CloseGlobalHandle;
+use strict;
+# use Carp;
+
+#------------------------------------------------------------------------------
+# new
+#
+sub new {
+	my ($class, $fh) = @_;
+	my $self = bless {}, $class;
+	
+	$self->{'fh'} = $fh;
+	return $self;
+}
+#
+# new
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# DESTROY
+#
+DESTROY {
+	my ($self) = @_;
+	my $global = $Debug::ShowStuff::out;
+	
+	# if the global output filehandle still exists
+	if ($global) {
+		
+		# if it's a filehandle object
+		if ( UNIVERSAL::isa($global, 'FileHandle') ) {
+			
+			# if it's the same filehandle object as this object references
+			if ($global == $self->{'fh'}) {
+				# print "closing $global\n";
+				
+				undef $global;
+				undef $Debug::ShowStuff::out;
+				Debug::ShowStuff::setoutput('stdout');
+			}
+		}
+	}
+
+}
+#
+# DESTROY
+#------------------------------------------------------------------------------
+
+
+
+#
+# CloseGlobalHandle
+###############################################################################
+
+
+
+###############################################################################
+# Indent
+#
+# An object in this class for the purpose of decrementing the current
+# indent level when it is destroyed.  On destruction is decrements 
+# $Debug::ShowStuff::indent_level.
+#
+package Debug::ShowStuff::Indent;
+use strict;
+
+
+#---------------------------------------------------------------------------
+# new
+#
+sub new {
+	my ($class, %opts) = @_;
+	my $indent = bless({%opts}, $class);
+	return $indent;
+}
+#
+# new
+#---------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# DESTROY
+#
+DESTROY {
+	my ($self) = @_;
+	
+	# add bottom space if necessary
+	if ($self->{'bottom_space'})
+		{ Debug::ShowStuff::println() }
+	
+	if ($Debug::ShowStuff::indent_level > 0 )
+		{ $Debug::ShowStuff::indent_level-- }
+}
+#
+# DESTROY
+#------------------------------------------------------------------------------
+
+
+#
+# CloseIndent
+###############################################################################
+
+
+
+
+__END__
+
 
 =head1 TERMS AND CONDITIONS
 
-Copyright (c) 2001-2003 by Miko O'Sullivan.  All rights reserved.  This program is 
-free software; you can redistribute it and/or modify it under the same terms 
-as Perl itself. This software comes with B<NO WARRANTY> of any kind.
+Copyright (c) 2001-2010 by Miko O'Sullivan.  All rights reserved.  This
+program is free software; you can redistribute it and/or modify it under the
+same terms as Perl itself. This software comes with B<NO WARRANTY> of any kind.
 
 =head1 AUTHORS
 
@@ -1360,9 +2817,17 @@ F<miko@idocs.com>
 
 Initial public release
 
+=item Version 1.01    May 29, 2003
+
+Setting sort order of hash leys to case insensitive
+
+=item Version 1.10    Nov 6, 2010
+
+After seven years, decided to update the version on CPAN
+
 =back
 
-
+=cut
 
 
 # return true

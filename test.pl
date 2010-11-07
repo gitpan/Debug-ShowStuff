@@ -1,26 +1,14 @@
-#!/usr/local/bin/perl -w
+#!/usr/bin/perl -w
 use strict;
+use lib '../../';
 use Debug::ShowStuff ':all';
 use Test;
 
+# Not really sure what to test: it just outputs stuff.  This script
+# just tests that the module loads.
 
-BEGIN { plan tests => 5 };
+BEGIN { plan tests => 1 };
 
-my ($str, %hash, @arr, $scalar);
+println 'yup, it works';
 
-%hash = qw[a 1 b 2 c 3];
-@arr = %hash;
-$scalar = @arr;
-
-$str = showhash %hash;
-ok 1;
-$str = showhash \%hash;
-ok 1;
-
-$str = showarr @arr;
-ok 1;
-$str = showarr \@arr;
-ok 1;
-
-$str = showscalar $scalar;
-ok 1;
+ok(1);
