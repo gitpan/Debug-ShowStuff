@@ -4,7 +4,11 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
 	'NAME'            => "Debug::ShowStuff",
 	'VERSION_FROM'    => "ShowStuff.pm", # finds $VERSION
-	'PREREQ_PM'       => {Tie::IxHash => 1.1}, # e.g., Module::Name => 1.1
+	'PREREQ_PM'       => {
+		'Tie::IxHash' => 1.1,
+		'Taint' => 0.09,
+		'MemHandle' => 0.06,
+	}, # e.g., Module::Name => 1.1
 	
 	# Add these new keywords supported since 5.005
 	(

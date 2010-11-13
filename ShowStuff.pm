@@ -6,6 +6,10 @@ use Carp;
 use Tie::IxHash;
 use vars qw[$VERSION];
 
+# version
+$VERSION = '1.11';
+
+
 # allow for forced context
 # This is a change to how Debug::ShowStuff used to work.  It used to be that
 # the output of a function (e.g. println) was returned as a scalar if the
@@ -29,9 +33,6 @@ $active = 1;
 # INDENT: how far to indent a line
 our $indent_level = 0;
 my $indent_tab = '   ';
-
-# version
-$VERSION = '1.10';
 
 # constants
 use constant STDTABLE => qq|<p>\n<table border="4" rules="rows" cellspacing="0" cellpadding="3">\n|;
@@ -73,6 +74,7 @@ push @ISA, 'Exporter';
 	showstuff
 	showsth
 	indent
+	timer
 ];
 
 %EXPORT_TAGS = ('all' => [@EXPORT_OK]);
@@ -348,10 +350,10 @@ produces this output, including the newline:
  hello world
 
 In web mode it puts the output inside a <p> element. The values are HTML
-escaped so that HTML-significant characters like lt<> and gt<> are actually
-displayed as lt<> and gt<>.  The <p> element has CSS styles set so that the
+escaped so that HTML-significant characters like < and > are actually
+displayed as < and >.  The <p> element has CSS styles set so that the
 characters are always black, the background is always white, text is
-left-alignedthe, and the <p>, element has a black border, regardless
+left-aligned, and the <p> element has a black border, regardless
 of the styles of the surrounding elements. So, for example, in web mode,
 the following code:
 
@@ -439,7 +441,7 @@ So, for example, the following code:
 
  showhash %hash;
 
-Produces the following output:
+Produces the following output.  Notice that the keys are in alphabetic order:
 
  ---------------------------------------
  Curly = funny bald guy
@@ -1147,7 +1149,7 @@ you're safe from infinite recursion.
 
 There are several optional parameters, described in the following sections.
 
-=head2 maxhash
+B<option:> maxhash
 
 The C<maxhash> option allows you to indicate the maximum number of hash
 elements to display.  If a hash has more then C<maxhash> elements then none of
@@ -1160,7 +1162,7 @@ displays the hash values if there are 10 or fewer elements in the hash:
 
 If C<maxhash> is not sent then there is no maximum.
 
-=head2 maxarr
+B<option:> maxarr
 
 The C<maxarr> option allows you to indicate the maximum number of array
 elements to display.  If an array has more then C<maxarr> elements then none
@@ -1168,18 +1170,17 @@ of them are displayed or recursed through, and instead an indicator of how
 many elements there are is output.  If C<maxarr> is not sent then there is no
 maximum.
 
-
-=head2 depth
+B<option:> depth
 
 The C<depth> option allows you to indicate a maximum depth to display in the
 tree. If C<depth> is not sent then there is no maximum depth.
 
-=head2 skip
+B<option:> skip
 
 A list of hash elements to skip.  Only applies to the top element and only if
 it is a hash.
 
-=head2 skipall
+B<option:> skipall
 
 Works the same as C<skip>, but applies to all hashes in the structure, not
 just the top-level hash.
@@ -1448,7 +1449,7 @@ In web mode, the output is an <hr> tag, unless the C<title> option is sent,
 in which case the output is C<p> element with the title as the content. The
 <p> element has a gray background and a black border.
 
-=head2 option: title
+B<option:> title
 
 If the C<title>option is sent, the titleis embedded in the horizontal rule.
 
@@ -1805,6 +1806,7 @@ sub showstderr {
 #------------------------------------------------------------------------------
 # inweb
 #
+
 =head2 inweb
 
 Returns a guess on if we're in a web environment.  The guess is pretty simple:
@@ -1835,7 +1837,7 @@ sub inweb {
 =head2 output_to_file($path)
 
 Sends Debug::ShowStuff output to a file instead of to STDOUT or STDERR.  The
-value of this function MUST be assigned to a variable or it has not effect.
+value of this function MUST be assigned to a variable or it has no effect.
 Don't do anything with the returned value... it is NOT a file handle.  The
 returned value is an object that, when it goes out of scope, closes the output
 file handle.
@@ -2324,7 +2326,7 @@ print <<'(HTML)';
 # indent
 #
 
-=head2 indent
+=head2 indent()
 
 C<indent()> is for situations where you're outputting a lot of stuff and you
 want to tidy up the list by indenting some of the output.  Currently
@@ -2367,7 +2369,7 @@ By default, three spaces are used to indent. To change that set
 $Debug::ShowStuff::indent_tab to whatever string you want to use for
 indentation.
 
-=head2 option: bottom_space
+B<option:> bottom_space
 
 The C<bottom_space> option indicates to output an extra line at the bottom
 of the indented output, just to give some extra division before the next
@@ -2415,12 +2417,60 @@ sub indent {
 #------------------------------------------------------------------------------
 
 
+#------------------------------------------------------------------------------
+# timer
+#
+
+=head1 timer();
+
+This function is useful for when you want to display how long it took for your
+code to run.  Assign the return value of this function to a variable.  When the
+variable goes out of scope then the difference between the start and end time is
+displayed in seconds.  For example, the following code:
+
+ do {
+    my $timer = timer();
+    sleep 3;
+ };
+
+outputs this:
+
+ start timer
+ duration: 3 seconds
+
+B<option:> title
+
+If you send the C<title> option, then that title will be displayed with the
+beginning and ending output.  For example, this code:
+
+ do {
+    my $timer = timer(title=>'my block');
+    sleep 3;
+ };
+
+produces this output:
+
+ start timer - my block
+ duration - my block: 3 seconds
+
+
+=cut
+
+sub timer {
+	my (%opts) = @_;
+	return Debug::ShowStuff::Timer->new(%opts);
+}
+#
+# timer
+#------------------------------------------------------------------------------
+
+
 
 ###############################################################################
 # ShowStdErr
 #
 package Debug::ShowStuff::ShowStdErr;
-require 5.005;
+require 5.005; # require at least Perl version 5.005
 use strict;
 
 
@@ -2794,13 +2844,90 @@ DESTROY {
 
 
 
+###############################################################################
+# Timer
+#
+# An object in this class for the purpose of showing the amount of time
+# something took to run.  When the object is initialized it notes the current
+# time.  When it is destroyed is displays the number of seconds between when
+# it was created and when it was destroyed.
+#
+package Debug::ShowStuff::Timer;
+use strict;
+
+
+#---------------------------------------------------------------------------
+# new
+#
+sub new {
+	my ($class, %opts) = @_;
+	my $timer = bless({%opts}, $class);
+	
+	# hold on to start time
+	$timer->{'start'} = time();
+	
+	# note beginning of duration
+	if (defined $timer->{'title'}) {
+		Debug::ShowStuff::println('start timer - ', $timer->{'title'});
+	}
+	else {
+		Debug::ShowStuff::println('start timer');
+	}
+	
+	# return
+	return $timer;
+}
+#
+# new
+#---------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# DESTROY
+#
+DESTROY {
+	my ($timer) = @_;
+	my ($duration);
+	
+	# get duration
+	$duration = time() - $timer->{'start'};
+	
+	# note beginning of duration
+	if (defined $timer->{'title'}) {
+		Debug::ShowStuff::println(
+			'duration - ',
+			$timer->{'title'},
+			': ',
+			$duration,
+			' seconds',
+		);
+	}
+	else {
+		Debug::ShowStuff::println(
+			'duration : ',
+			$duration,
+			' seconds',
+		);
+	}
+}
+#
+# DESTROY
+#------------------------------------------------------------------------------
+
+
+#
+# Timer
+###############################################################################
+
+
+
 
 __END__
 
 
 =head1 TERMS AND CONDITIONS
 
-Copyright (c) 2001-2010 by Miko O'Sullivan.  All rights reserved.  This
+Copyright (c) 2010 by Miko O'Sullivan.  All rights reserved.  This
 program is free software; you can redistribute it and/or modify it under the
 same terms as Perl itself. This software comes with B<NO WARRANTY> of any kind.
 
@@ -2815,15 +2942,20 @@ F<miko@idocs.com>
 
 =item Version 1.00    May 29, 2003
 
-Initial public release
+Initial public release.
 
 =item Version 1.01    May 29, 2003
 
-Setting sort order of hash leys to case insensitive
+Setting sort order of hash keys to case insensitive.
 
 =item Version 1.10    Nov 6, 2010
 
-After seven years, decided to update the version on CPAN
+After seven years, decided to update the version on CPAN.
+
+=item Version 1.11    Nov 13, 2010
+
+Fixed prerequisite requirement for MemHandle and Taint. Added timer()
+functions.  Some minor documentation fixes and tidying up.
 
 =back
 

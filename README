@@ -1,4 +1,4 @@
-Debug::ShowStuff version 1.10
+Debug::ShowStuff version 1.11
 =========================
 
 NAME
@@ -182,12 +182,12 @@ FUNCTION DESCRIPTIONS
      hello world
 
     In web mode it puts the output inside a <p> element. The values are HTML
-    escaped so that HTML-significant characters like lt<> and gt<> are
-    actually displayed as lt<> and gt<>. The <p> element has CSS styles set
-    so that the characters are always black, the background is always white,
-    text is left-alignedthe, and the <p>, element has a black border,
-    regardless of the styles of the surrounding elements. So, for example,
-    in web mode, the following code:
+    escaped so that HTML-significant characters like < and > are actually
+    displayed as < and >. The <p> element has CSS styles set so that the
+    characters are always black, the background is always white, text is
+    left-aligned, and the <p> element has a black border, regardless of the
+    styles of the surrounding elements. So, for example, in web mode, the
+    following code:
 
      println 'whatever';
 
@@ -224,7 +224,8 @@ FUNCTION DESCRIPTIONS
 
      showhash %hash;
 
-    Produces the following output:
+    Produces the following output. Notice that the keys are in alphabetic
+    order:
 
      ---------------------------------------
      Curly = funny bald guy
@@ -366,7 +367,8 @@ FUNCTION DESCRIPTIONS
     There are several optional parameters, described in the following
     sections.
 
-  maxhash
+    option: maxhash
+
     The "maxhash" option allows you to indicate the maximum number of hash
     elements to display. If a hash has more then "maxhash" elements then
     none of them are displayed or recursed through, and instead an indicator
@@ -378,22 +380,26 @@ FUNCTION DESCRIPTIONS
    
     If "maxhash" is not sent then there is no maximum.
 
-  maxarr
+    option: maxarr
+
     The "maxarr" option allows you to indicate the maximum number of array
     elements to display. If an array has more then "maxarr" elements then
     none of them are displayed or recursed through, and instead an indicator
     of how many elements there are is output. If "maxarr" is not sent then
     there is no maximum.
 
-  depth
+    option: depth
+
     The "depth" option allows you to indicate a maximum depth to display in
     the tree. If "depth" is not sent then there is no maximum depth.
 
-  skip
+    option: skip
+
     A list of hash elements to skip. Only applies to the top element and
     only if it is a hash.
 
-  skipall
+    option: skipall
+
     Works the same as "skip", but applies to all hashes in the structure,
     not just the top-level hash.
 
@@ -406,7 +412,8 @@ FUNCTION DESCRIPTIONS
     sent, in which case the output is "p" element with the title as the
     content. The <p> element has a gray background and a black border.
 
-  option: title
+    option: title
+
     If the "title"option is sent, the titleis embedded in the horizontal
     rule.
 
@@ -449,9 +456,17 @@ FUNCTION DESCRIPTIONS
     STDERR. When the variable goes out of scope, the object outputs the
     STDOUT content with the STDERR content at the top of the web page.
 
+  inweb
+    Returns a guess on if we're in a web environment. The guess is pretty
+    simple: if the environment variable "REQUEST_URI" is true (in the
+    Perlish sense) then this function returns true.
+
+    If the global $Debug::ShowStuff::forceweb is defined, this function
+    returns the value of $Debug::ShowStuff::forceweb.
+
   output_to_file($path)
     Sends Debug::ShowStuff output to a file instead of to STDOUT or STDERR.
-    The value of this function MUST be assigned to a variable or it has not
+    The value of this function MUST be assigned to a variable or it has no
     effect. Don't do anything with the returned value... it is NOT a file
     handle. The returned value is an object that, when it goes out of scope,
     closes the output file handle.
@@ -501,7 +516,7 @@ FUNCTION DESCRIPTIONS
     NOTE: The text mode version of this function has not been fully
     implemented.
 
-  indent
+  indent()
     "indent()" is for situations where you're outputting a lot of stuff and
     you want to tidy up the list by indenting some of the output. Currently
     "indent()" only has an effect in text mode. It does nothing in web mode.
@@ -543,7 +558,8 @@ FUNCTION DESCRIPTIONS
     $Debug::ShowStuff::indent_tab to whatever string you want to use for
     indentation.
 
-  option: bottom_space
+    option: bottom_space
+
     The "bottom_space" option indicates to output an extra line at the
     bottom of the indented output, just to give some extra division before
     the next batch of code. For example, the following code does not use
@@ -578,22 +594,58 @@ FUNCTION DESCRIPTIONS
      Moe
         length: 3
 
+timer();
+    This function is useful for when you want to display how long it took
+    for your code to run. Assign the return value of this function to a
+    variable. When the variable goes out of scope then the difference
+    between the start and end time is displayed in seconds. For example, the
+    following code:
+
+     do {
+        my $timer = timer();
+        sleep 3;
+     };
+
+    outputs this:
+
+     start timer
+     duration: 3 seconds
+
+    option: title
+
+    If you send the "title" option, then that title will be displayed with
+    the beginning and ending output. For example, this code:
+
+     do {
+        my $timer = timer(title=>'my block');
+        sleep 3;
+     };
+
+    produces this output:
+
+     start timer - my block
+     duration - my block: 3 seconds
+
 TERMS AND CONDITIONS
-    Copyright (c) 2001-2010 by Miko O'Sullivan. All rights reserved. This
-    program is free software; you can redistribute it and/or modify it under
-    the same terms as Perl itself. This software comes with NO WARRANTY of
-    any kind.
+    Copyright (c) 2010 by Miko O'Sullivan. All rights reserved. This program
+    is free software; you can redistribute it and/or modify it under the
+    same terms as Perl itself. This software comes with NO WARRANTY of any
+    kind.
 
 AUTHORS
     Miko O'Sullivan miko@idocs.com
 
 VERSION
     Version 1.00 May 29, 2003
-        Initial public release
+        Initial public release.
 
     Version 1.01 May 29, 2003
-        Setting sort order of hash leys to case insensitive
+        Setting sort order of hash keys to case insensitive.
 
     Version 1.10 Nov 6, 2010
-        After seven years, decided to update the version on CPAN
+        After seven years, decided to update the version on CPAN.
+
+    Version 1.11 Nov 13, 2010
+        Fixed prerequisite requirement for MemHandle and Taint. Added
+        timer() functions. Some minor documentation fixes and tidying up.
 
