@@ -1,4 +1,4 @@
-Debug::ShowStuff version 1.11
+Debug::ShowStuff version 1.12
 =========================
 
 NAME
@@ -648,4 +648,8 @@ VERSION
     Version 1.11 Nov 13, 2010
         Fixed prerequisite requirement for MemHandle and Taint. Added
         timer() functions. Some minor documentation fixes and tidying up.
+
+    Version 1.12 Nov 29, 2010
+        Changing from using Taint module, which has had a lot of problems,
+        to Scalar::Util, which is more (but not completely) stable.
 

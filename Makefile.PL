@@ -5,8 +5,8 @@ WriteMakefile(
 	'NAME'            => "Debug::ShowStuff",
 	'VERSION_FROM'    => "ShowStuff.pm", # finds $VERSION
 	'PREREQ_PM'       => {
+		'Scalar::Util' => 5.8.8,
 		'Tie::IxHash' => 1.1,
-		'Taint' => 0.09,
 		'MemHandle' => 0.06,
 	}, # e.g., Module::Name => 1.1
 	

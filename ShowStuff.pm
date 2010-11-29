@@ -7,7 +7,7 @@ use Tie::IxHash;
 use vars qw[$VERSION];
 
 # version
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 
 # allow for forced context
@@ -2037,7 +2037,8 @@ first argument is a hashref, displays the tainted status of each element value.
 
 sub showtainted {
 	my (@vals) = @_;
-	require Taint;
+	# require Taint;
+	require Scalar::Util;
 	
 	# if first value is a hashref, show as hash
 	if (UNIVERSAL::isa $vals[0], 'HASH') {
@@ -2047,7 +2048,7 @@ sub showtainted {
 		while ( my($key, $val) = each(%$hashref) ) {
 			my ($tainted);
 			
-			if (Taint::tainted($val))
+			if (Scalar::Util::tainted($val))
 				{ $tainted = 'tainted' }
 			else
 				{ $tainted = 'not tainted' }
@@ -2063,7 +2064,7 @@ sub showtainted {
 		foreach my $val (@vals) {
 			my ($tainted);
 			
-			if (Taint::tainted($val))
+			if (Scalar::Util::tainted($val))
 				{ $tainted = 'tainted:     ' }
 			else
 				{ $tainted = 'not tainted: ' }
@@ -2956,6 +2957,11 @@ After seven years, decided to update the version on CPAN.
 
 Fixed prerequisite requirement for MemHandle and Taint. Added timer()
 functions.  Some minor documentation fixes and tidying up.
+
+=item Version 1.12    Nov 29, 2010
+
+Changing from using Taint module, which has had a lot of problems, to
+Scalar::Util, which is more (but not completely) stable.
 
 =back
 
