@@ -1,4 +1,4 @@
-Debug::ShowStuff version 1.12
+Debug::ShowStuff version 1.13
 =========================
 
 NAME
@@ -652,4 +652,7 @@ VERSION
     Version 1.12 Nov 29, 2010
         Changing from using Taint module, which has had a lot of problems,
         to Scalar::Util, which is more (but not completely) stable.
+
+    Version 1.13 Dec 1, 2010
+        Fixed bug in prerequisites for Scalar::Util.
 

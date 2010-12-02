@@ -7,7 +7,7 @@ use Tie::IxHash;
 use vars qw[$VERSION];
 
 # version
-$VERSION = '1.12';
+$VERSION = '1.13';
 
 
 # allow for forced context
@@ -2962,6 +2962,10 @@ functions.  Some minor documentation fixes and tidying up.
 
 Changing from using Taint module, which has had a lot of problems, to
 Scalar::Util, which is more (but not completely) stable.
+
+=item Version 1.13    Dec 1, 2010
+
+Fixed bug in prerequisites for Scalar::Util.
 
 =back
 
