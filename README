@@ -1,34 +1,31 @@
-Debug::ShowStuff version 1.13
-=========================
-
 NAME
+
     Debug::ShowStuff - A collection of handy debugging routines for
     displaying the values of variables with a minimum of coding.
 
 SYNOPSIS
+
     Here's a sampling of a few of my favorite functions in this module.
 
             use Debug::ShowStuff ':all';
-        
+            
             # display values of a hash or hash reference
             showhash %hash;
             showhash $hashref;
-        
+            
             # display values of an array or array reference
             showarr @arr;
             showarr $arrref;
-        
-            # show all nested structures
-            showref $reference
-        
+            
             # show all the params received through CGI
             showcgi();
-        
+            
             # A particularly fancy utility: display STDERR at top of web page
             my $warnings = showstderr;
 
 INSTALLATION
-    "Debug::ShowStuff" can be installed with the usual routine:
+
+    Debug::ShowStuff can be installed with the usual routine:
 
             perl Makefile.PL
             make
@@ -39,35 +36,34 @@ INSTALLATION
     your library trees.
 
 DESCRIPTION
-    "Debug::ShowStuff" grew dynamically from my needs in debugging code. I
+
+    Debug::ShowStuff grew dynamically from my needs in debugging code. I
     found myself doing the same tasks over and over... displaying the keys
     and values in a hash, displaying the elements in an array, displaying
-    the output of STDERR in a web page, etc. "Debug::ShowStuff" began as two
-    or three of my favorite routines and grew as I added to that collection.
-    Finally I decided to publish these tools in the hope that other Perl
-    hackers will find them useful.
+    the output of STDERR in a web page, etc. Debug::ShowStuff began as two
+    or three of my favorite routines and grew as I added to that
+    collection. Finally I decided to publish these tools in the hope that
+    other Perl programmers will find them useful.
 
-    "Debug::ShowStuff" is intended for debugging, not for production work. I
-    would discourage anyone from using "Debug::ShowStuff" in
-    ready-for-primetime code. "Debug::ShowStuff" is only for quick-n-dirty
+    Debug::ShowStuff is intended for debugging, not for production work. I
+    would discourage anyone from using Debug::ShowStuff in
+    ready-for-primetime code. Debug::ShowStuff is only for quick-n-dirty
     displays of variable values in order to debug your code.
 
-    These functions display values the way I personally like them displayed.
-    Your preferences may be different. I encourage you to modify
-    "Debug::ShowStuff" to suit your own needs.
-
 text and web modes
-    The functions in "Debug::ShowStuff" are designed to output either in
+
+    The functions in Debug::ShowStuff are designed to output either in
     plain text mode (like if you're running the script from a command
     prompt), or in web mode (like from a CGI). If the script appears to be
-    running in a CGI or other web mode (see the "inweb" function) then
-    values are output using HTML, with special HTML characters escaped for
-    proper display. Othewise the values are output as they are.
+    running in a CGI or other web mode (see the inweb function) then values
+    are output using HTML, with special HTML characters escaped for proper
+    display. Othewise the values are output as they are.
 
-    Generally you won't need to bother telling "Debug::ShowStuff" if you're
+    Generally you won't need to bother telling Debug::ShowStuff if you're
     in text or web mode... it figures it out on its own.
 
 dynamic output/return: different than previous versions
+
     NOTE: The dynamic behavior of "show" functions has changed since the
     last version of Debug::ShowStuff. "show" functions now always output to
     STDOUT or STDERR unless $Debug::ShowStuff::always_void is set to false.
@@ -75,15 +71,15 @@ dynamic output/return: different than previous versions
 
     If $always_void is false, then the following applies:
 
-    The functions that start with "show" dynamically either output to STDOUT
-    or STDERR or return a string, depending on the context in which the
-    functions are called. For example, if you call showhash in a void
+    The functions that start with "show" dynamically either output to
+    STDOUT or STDERR or return a string, depending on the context in which
+    the functions are called. For example, if you call showhash in a void
     context:
 
       showhash %myhash;
 
-    then the contents of %myhash are output to STDOUT. On the other hand, if
-    the function is called in scalar context:
+    then the contents of %myhash are output to STDOUT. On the other hand,
+    if the function is called in scalar context:
 
       my $var = showhash(%myhash);
 
@@ -91,13 +87,14 @@ dynamic output/return: different than previous versions
     returned and stored in $var.
 
     By default, output is sent to STDOUT, not STDERR. You can change the
-    default output to STDERR using the "setoutput" command. See the docs for
+    default output to STDERR using the setoutput command. See the docs for
     that command for more detail.
 
 Displaying "invisible" strings
-    To facilitate telling the difference between "[undef]" and an empty
-    string, functions output the strings "[undef]" and "[empty string]". So,
-    for example, this code:
+
+    To facilitate telling the difference between [undef] and an empty
+    string, functions output the strings "[undef]" and "[empty string]".
+    So, for example, this code:
 
      println undef;
      println "";
@@ -108,7 +105,9 @@ Displaying "invisible" strings
      [empty string]
 
 FUNCTION DESCRIPTIONS
-  showstuff()
+
+ showstuff()
+
     This function turns on/off most of the functions in this module, with
     one import exception explained below. The function also returns the
     state of whether or not Debug::ShowStuff is on/off.
@@ -118,7 +117,8 @@ FUNCTION DESCRIPTIONS
 
     The function is also used by most subroutines to determine if they
     should actually output anything. $active is not the only criteria used
-    to determine if Debug::ShowStuff is active. The algorithm is as follows:
+    to determine if Debug::ShowStuff is active. The algorithm is as
+    follows:
 
     - If the environment variable SHOWSTUFF is defined and false then this
     function returns false regardless of the state of $active.
@@ -127,21 +127,22 @@ FUNCTION DESCRIPTIONS
     defined and true then $active is used to determine on/off.
 
     The purpose of this algorithm is to allow the used of debugging display
-    in a regression test but turn off those displays when a lot of tests are
-    run at once and only pass/fail information is needed from the regtest.
+    in a regression test but turn off those displays when a lot of tests
+    are run at once and only pass/fail information is needed from the
+    regtest.
 
     For example, suppose you have a script as follows:
 
      #!/usr/bin/perl -w
      use strict;
      use Debug::ShowStuff ':all';
- 
+     
      my ($rv);
- 
+     
      println 'running my_function()';
      $rv = my_function();
      println 'the returned value is: ', $rv;
- 
+     
      $rv or die 'error!';
 
     The output of the script might look something like this:
@@ -157,18 +158,19 @@ FUNCTION DESCRIPTIONS
      #!/usr/bin/perl -w
      use strict;
      use Debug::ShowStuff ':all';
- 
+     
      my @tests = ("./script1.pl", "./script2.pl", "./script3.pl");
      $ENV{'SHOWSTUFF'} = 0;
- 
+     
      foreach my $test () {
         system($test) and die "$test failed";
      }
 
     In that case, none of the stuff from the test scripts would be output.
 
-  println
-    "println" was the original Debug::ShowStuff function. It simply outputs
+ println
+
+    println was the original Debug::ShowStuff function. It simply outputs
     the given values.
 
     In text mode it adds a newline to the end.
@@ -181,13 +183,13 @@ FUNCTION DESCRIPTIONS
 
      hello world
 
-    In web mode it puts the output inside a <p> element. The values are HTML
-    escaped so that HTML-significant characters like < and > are actually
-    displayed as < and >. The <p> element has CSS styles set so that the
-    characters are always black, the background is always white, text is
-    left-aligned, and the <p> element has a black border, regardless of the
-    styles of the surrounding elements. So, for example, in web mode, the
-    following code:
+    In web mode it puts the output inside a <p> element. The values are
+    HTML escaped so that HTML-significant characters like < and > are
+    actually displayed as < and >. The <p> element has CSS styles set so
+    that the characters are always black, the background is always white,
+    text is left-aligned, and the <p> element has a black border,
+    regardless of the styles of the surrounding elements. So, for example,
+    in web mode, the following code:
 
      println 'whatever';
 
@@ -195,8 +197,8 @@ FUNCTION DESCRIPTIONS
 
      <p style="background-color:white;color:black;text-align:left">whatever</p>
 
-    Like other "show" functions, undef is output as the string "[undef]" and
-    an empty string is output as the string "[empty string]".
+    Like other "show" functions, undef is output as the string "[undef]"
+    and an empty string is output as the string "[empty string]".
 
     Values in the arguments array are output concatenated together with no
     spaces in between. Each value is evaluated independently for if it is
@@ -209,7 +211,13 @@ FUNCTION DESCRIPTIONS
 
      whatever[empty string][undef]dude
 
-  showhash
+ printnorm
+
+    Works like println but doesn't add trailing newline. In web environment
+    uses <span> instead of <p>.
+
+ showhash
+
     Displays the keys and values in a hash. Input is either a single hash
     reference or a regular hash. The key=values pairs are sorted by the
     names of the keys.
@@ -221,7 +229,7 @@ FUNCTION DESCRIPTIONS
         Curly => 'funny bald guy',
         Moe => 'guy in charge',
      );
-
+    
      showhash %hash;
 
     Produces the following output. Notice that the keys are in alphabetic
@@ -240,7 +248,7 @@ FUNCTION DESCRIPTIONS
         Curly => 'funny bald guy',
         Moe => 'guy in charge',
      };
-
+    
      showhash $hash;
 
     If an undef value is sent instead of a hashref, then that fact is
@@ -266,16 +274,17 @@ FUNCTION DESCRIPTIONS
 
     option: line_cut => 1
 
-    If the "line_cut" option is sent, then each value is truncated after the
+    If the line_cut option is sent, then each value is truncated after the
     first newline if there is one.
 
-  showarr, showarray
+ showarr, showarray
+
     Displays the values of an array. c<showarr> and c<showarray>
 
     Each element is displayed in a table row (in web mode) or on a separate
     line (in text mode).
 
-    If "showarray" receives exactly one argument, and if that item is an
+    If showarray receives exactly one argument, and if that item is an
     array reference, then the routine assumes that you want to display the
     elements in the referenced array. Therefore, the following blocks of
     code display the same thing:
@@ -283,19 +292,22 @@ FUNCTION DESCRIPTIONS
        showarray @myarr;
        showarray \@myarr;
 
-  showarraydiv
-    Works just like "showarray", except that in text mode displays a solid
+ showarraydiv
+
+    Works just like showarray, except that in text mode displays a solid
     line between each element of the array.
 
-  showscalar
-    Outputs the value of a scalar. The name is slightly innaccurate: you can
-    input an array. The array will be joined together to form a single
+ showscalar
+
+    Outputs the value of a scalar. The name is slightly innaccurate: you
+    can input an array. The array will be joined together to form a single
     scalar.
 
-    Actually, I hardly ever use "showscalar", but it seemed unbalanced to
-    have "showhash" and "showarray" without "showscalar".
+    Actually, I hardly ever use showscalar, but it seemed unbalanced to
+    have showhash and showarray without showscalar.
 
-  showcgi
+ showcgi
+
     Displays the CGI parameter keys and values. This sub always outputs
     HTML.
 
@@ -304,16 +316,16 @@ FUNCTION DESCRIPTIONS
 
     option: q
 
-    The optional parameter "q", may be a CGI query object:
+    The optional parameter q, may be a CGI query object:
 
        my $query = CGI->new();
        showcgi q => $query;
 
-    If "q" is not sent, then a CGI object is created on the fly.
+    If q is not sent, then a CGI object is created on the fly.
 
     option: skipempty
 
-    If the optional parameter "skipempty" is true:
+    If the optional parameter skipempty is true:
 
        showcgi skipempty => 1;
 
@@ -322,8 +334,8 @@ FUNCTION DESCRIPTIONS
 
     option: skip
 
-    "skip" sets a list of parameters to not display. For example, if you
-    don't want to see the "choices" or "toppings" params, then call showcgi
+    skip sets a list of parameters to not display. For example, if you
+    don't want to see the choices or toppings params, then call showcgi
     like this:
 
        showcgi skip => ['choices', 'toppings'];
@@ -333,9 +345,10 @@ FUNCTION DESCRIPTIONS
 
        showcgi skip => 'choices';
 
-  showref($ref, %options)
-    Displays a hash, array, or scalar references, treeing down through other
-    references it contains. So, for example, the following code:
+ showref($ref, %options)
+
+    Displays a hash, array, or scalar references, treeing down through
+    other references it contains. So, for example, the following code:
 
      my $ob = {
         name    => 'Raha',
@@ -346,7 +359,7 @@ FUNCTION DESCRIPTIONS
            'Furocha',
            ],
         };
-    
+        
      showref $ob;
 
     produces the following output:
@@ -369,29 +382,30 @@ FUNCTION DESCRIPTIONS
 
     option: maxhash
 
-    The "maxhash" option allows you to indicate the maximum number of hash
-    elements to display. If a hash has more then "maxhash" elements then
-    none of them are displayed or recursed through, and instead an indicator
-    of how many elements there are is output. So, for example, the following
+    The maxhash option allows you to indicate the maximum number of hash
+    elements to display. If a hash has more then maxhash elements then none
+    of them are displayed or recursed through, and instead an indicator of
+    how many elements there are is output. So, for example, the following
     command only displays the hash values if there are 10 or fewer elements
     in the hash:
 
        showref $myob, maxhash=>10;
-   
-    If "maxhash" is not sent then there is no maximum.
+       
+
+    If maxhash is not sent then there is no maximum.
 
     option: maxarr
 
-    The "maxarr" option allows you to indicate the maximum number of array
-    elements to display. If an array has more then "maxarr" elements then
-    none of them are displayed or recursed through, and instead an indicator
-    of how many elements there are is output. If "maxarr" is not sent then
-    there is no maximum.
+    The maxarr option allows you to indicate the maximum number of array
+    elements to display. If an array has more then maxarr elements then
+    none of them are displayed or recursed through, and instead an
+    indicator of how many elements there are is output. If maxarr is not
+    sent then there is no maximum.
 
     option: depth
 
-    The "depth" option allows you to indicate a maximum depth to display in
-    the tree. If "depth" is not sent then there is no maximum depth.
+    The depth option allows you to indicate a maximum depth to display in
+    the tree. If depth is not sent then there is no maximum depth.
 
     option: skip
 
@@ -400,53 +414,67 @@ FUNCTION DESCRIPTIONS
 
     option: skipall
 
-    Works the same as "skip", but applies to all hashes in the structure,
-    not just the top-level hash.
+    Works the same as skip, but applies to all hashes in the structure, not
+    just the top-level hash.
 
-  printhr
+ printhr
+
     Prints a horizontal rule. Handy for dividing up multiple println's.
 
     In text mode, the horizontal rule is a set of 80 dashes.
 
-    In web mode, the output is an <hr> tag, unless the "title" option is
-    sent, in which case the output is "p" element with the title as the
+    In web mode, the output is an <hr> tag, unless the title option is
+    sent, in which case the output is p element with the title as the
     content. The <p> element has a gray background and a black border.
 
     option: title
 
-    If the "title"option is sent, the titleis embedded in the horizontal
+    If the titleoption is sent, the title is embedded in the horizontal
     rule.
 
-  printnorm
-    Works like println but doesn't add trailing newline. In web environment
-    uses <span> instead of <p>.
+    option: dash
 
-  preln
-    Outputs the given values inside a <pre> element. Always outputs HTML.
+    If the dashoption is sent, the given character is used as the
+    separator. Only applies to text mode;
 
-  dieln
-    Works just like the "die" command, except it always adds an end-of-line
-    to the input array so you never get those "at line blah-blah-blah"
-    additions.
+ preln
 
-  diearr
-    Displays an array, then dies using "dieln".
+    Outputs the given values inside a <pre> element. If not in a web
+    environment, works just like preln.
 
-  pressenter
+ dieln
+
+    Works like the die command, except it always adds an end-of-line to the
+    input array so you never get those "at line blah-blah-blah" additions.
+
+ devexit
+
+    Works like dieln except it prepends 'dev exit: ' to the end of the
+    string. If no string is sent, just outputs "dev exit".
+
+ diearr
+
+    Displays an array, then dies using dieln.
+
+ pressenter
+
     For use at the command line. Outputs a prompt to "press enter to
     continue", then waits for you to do exactly that.
 
-  confirm
+ confirm
+
     Prompts the user for a y or n. Exits quietly if y is pressed.
 
-  httpheader
+ httpheader
+
     Outputs a text/html HTTP header. Not useful if you're using mod_perl.
 
-  showstderr
+ showstderr
+
     This function allows you to see, in the web page produced by a CGI,
     everything the CGI output to STDERR.
 
-    To use "showstderr", assign the return value of the function to a
+    To use showstderr, assign the return value of the function to a
     variable that is scoped to the entire CGI script:
 
       my $stderr = showstderr();
@@ -456,20 +484,22 @@ FUNCTION DESCRIPTIONS
     STDERR. When the variable goes out of scope, the object outputs the
     STDOUT content with the STDERR content at the top of the web page.
 
-  inweb
+ inweb
+
     Returns a guess on if we're in a web environment. The guess is pretty
-    simple: if the environment variable "REQUEST_URI" is true (in the
-    Perlish sense) then this function returns true.
+    simple: if the environment variable REQUEST_URI is true (in the Perlish
+    sense) then this function returns true.
 
-    If the global $Debug::ShowStuff::forceweb is defined, this function
-    returns the value of $Debug::ShowStuff::forceweb.
+    If the global $Debug::ShowStuff::forceenv is defined, this function
+    returns the value of $Debug::ShowStuff::forceenv.
 
-  output_to_file($path)
+ output_to_file($path)
+
     Sends Debug::ShowStuff output to a file instead of to STDOUT or STDERR.
     The value of this function MUST be assigned to a variable or it has no
     effect. Don't do anything with the returned value... it is NOT a file
-    handle. The returned value is an object that, when it goes out of scope,
-    closes the output file handle.
+    handle. The returned value is an object that, when it goes out of
+    scope, closes the output file handle.
 
     For example, the following code will output to three files names
     Larry.txt, Curly.txt, and Moe.txt:
@@ -480,53 +510,92 @@ FUNCTION DESCRIPTIONS
         println 'length: ', length($name);
      }
 
-  setoutput
-    Sets the default output handle. By default, routines in
-    "Debug::ShowStuff" output to STDOUT. With this command you can set the
-    default output to STDERR, or back to STDOUT. The following command sets
-    default output to STDERR:
+ setoutput
 
-       setoutput 'stderr';
+    Sets the default output handle. By default, routines in
+    Debug::ShowStuff output to STDOUT. With this command you can set the
+    default output to STDERR, back to STDOUT, to a filehandle you specify,
+    or to a Debug::ShowStuff::SeparatePrint file handle.
+
+    The following command sets default output to STDERR:
+
+     setoutput 'stderr';
 
     This command sets output back to STDOUT:
 
-       setoutput 'stdout';
+     setoutput 'stdout';
 
-    When default output is set to STDERR then the global
-    $Debug::ShowStuff::forceplain is set to true, which means that functions
-    in this module always output in text mode, not web mode.
+    This command sends output to a file handle of your choice:
 
-  fixundef
-    Takes a single argument. If that argument is undefined, returns an empty
-    string. Otherwise returns the argument exactly as it is.
+     setoutput $fh;
 
-  findininc
+    This command sends output to a Debug::ShowStuff::SeparatePrint file
+    handle. This option is a good way to create a simple log file. When you
+    print to this type of file handle, the file is opened separately just
+    for that write, an exclusive lock on the file is obtained, and the end
+    of the file is sought.
+
+    Note that the next parameter must be the path to the output file:
+
+     setoutput 'separateprint', $file_path;
+
+    option: new
+
+    If the new parameter is true, then the output file is open in
+    non-append mode, which means any existing contents are removed.
+
+ fixundef
+
+    Takes a single argument. If that argument is undefined, returns an
+    empty string. Otherwise returns the argument exactly as it is.
+
+ findininc
+
     Given one or more file names, searches @INC for where they are located.
     Returns an array of full file names.
 
-  showtainted(@values)
+ showtainted(@values)
+
     Given an array of values, shows which are tainted and which are not. If
     the first argument is a hashref, displays the tainted status of each
     element value.
 
-  showsth
-    Outputs a table of all rows in the given DBI statement handle. Note that
-    this function "uses up" the statement handle.
+ showsth
 
-    NOTE: The text mode version of this function has not been fully
-    implemented.
+    Outputs a table of all rows in the given DBI statement handle. Note
+    that this function "uses up" the statement handle.
 
-  indent()
-    "indent()" is for situations where you're outputting a lot of stuff and
+ showsql
+
+    showsql output the results of an SQL statement. showsql takes three
+    parameters: the database handle, the SQL statement, and an array-ref of
+    parameters for the SQL statement.
+
+ explainsql
+
+    explainsql outputs the result of an SQL EXPLAIN call. This function
+    works much like showsql. The parameters are the database handle, the
+    SQL statement, and an array-ref of SQL parameters. explainsql prepends
+    "EXPLAIN ANALYZE" to your SQL, runs the statement, then outputs the
+    results.
+
+    I have only used explainsql with PostGresql. I would be interested hear
+    about how it works with other database management systems and how it
+    mught be improved to work in those environments.
+
+ indent()
+
+    indent() is for situations where you're outputting a lot of stuff and
     you want to tidy up the list by indenting some of the output. Currently
-    "indent()" only has an effect in text mode. It does nothing in web mode.
+    indent() only has an effect in text mode. It does nothing in web mode.
 
-    "indent()" b<must be assigned to a variable> or it has no effect.
-    "indent()" increases the indent level by one. When the variable goes out
-    of scope, the indent level is decreased by one.
+    indent() must be assigned to a variable or it has no effect. indent()
+    increases the indent level by one. When the variable goes out of scope,
+    the indent level is decreased by one.
 
     For example suppose you want to display the values of records from a
-    database. You might loop through the records, outputting them like this:
+    database. You might loop through the records, outputting them like
+    this:
 
      while (my $record = $sth->fetchrow_hashref) {
         println $record->{'name_nick'};
@@ -544,7 +613,7 @@ FUNCTION DESCRIPTIONS
        name_nick   = Ricky
        salary      = $15,000
        ---------------------------------------
-
+    
      Dan
        ---------------------------------------
        name_first  = Daniel
@@ -560,10 +629,10 @@ FUNCTION DESCRIPTIONS
 
     option: bottom_space
 
-    The "bottom_space" option indicates to output an extra line at the
-    bottom of the indented output, just to give some extra division before
-    the next batch of code. For example, the following code does not use
-    "bottom_space":
+    The bottom_space option indicates to output an extra line at the bottom
+    of the indented output, just to give some extra division before the
+    next batch of code. For example, the following code does not use
+    bottom_space:
 
      foreach my $name (qw[Larry Moe]) {
         println $name;
@@ -590,16 +659,47 @@ FUNCTION DESCRIPTIONS
 
      Larry
         length: 5
-
+    
      Moe
         length: 3
 
-timer();
-    This function is useful for when you want to display how long it took
-    for your code to run. Assign the return value of this function to a
-    variable. When the variable goes out of scope then the difference
-    between the start and end time is displayed in seconds. For example, the
-    following code:
+ tempshowstuff
+
+    Temporarily turn showstuff on or off. Create a variable int he lexical
+    scope where you want the tempoary change, like this:
+
+    my $temp = tempshowstuff(1)
+
+    When the variable goes out of scope, showstuff will revert back to its
+    previous state.
+
+ showisa
+
+    Outputs the ISA hierarchy of an object or class. For example, the
+    following code outputs the ISA hierarchy for a Xapat object (Xapat is a
+    web server written in Perl and which uses Net::Server).
+
+     $xapat = Xapat->new(%opts);
+     showisa $xapat;
+
+    which outputs:
+
+     ------------------------------------
+     Xapat
+     Net::Server::HTTP
+     Net::Server::MultiType
+     Net::Server
+     ------------------------------------
+
+    Note that showisa loads Class::ISA, which is available on CPAN.
+
+ timer
+
+    This function is for when you want to display how long it took for your
+    code to run. Assign the return value of this function to a variable.
+    When the variable goes out of scope then the difference between the
+    start and end time is displayed in seconds. For example, the following
+    code:
 
      do {
         my $timer = timer();
@@ -613,7 +713,7 @@ timer();
 
     option: title
 
-    If you send the "title" option, then that title will be displayed with
+    If you send the title option, then that title will be displayed with
     the beginning and ending output. For example, this code:
 
      do {
@@ -626,33 +726,63 @@ timer();
      start timer - my block
      duration - my block: 3 seconds
 
+    method: $timer->elapsed
+
+    Returns the difference between when the timer was started and the
+    current time.
+
 TERMS AND CONDITIONS
-    Copyright (c) 2010 by Miko O'Sullivan. All rights reserved. This program
-    is free software; you can redistribute it and/or modify it under the
-    same terms as Perl itself. This software comes with NO WARRANTY of any
-    kind.
+
+    Copyright (c) 2010-2013 by Miko O'Sullivan. All rights reserved. This
+    program is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself. This software comes with NO
+    WARRANTY of any kind.
 
 AUTHORS
+
     Miko O'Sullivan miko@idocs.com
 
 VERSION
+
     Version 1.00 May 29, 2003
-        Initial public release.
+
+      Initial public release.
 
     Version 1.01 May 29, 2003
-        Setting sort order of hash keys to case insensitive.
+
+      Setting sort order of hash keys to case insensitive.
 
     Version 1.10 Nov 6, 2010
-        After seven years, decided to update the version on CPAN.
+
+      After seven years, decided to update the version on CPAN.
 
     Version 1.11 Nov 13, 2010
-        Fixed prerequisite requirement for MemHandle and Taint. Added
-        timer() functions. Some minor documentation fixes and tidying up.
+
+      Fixed prerequisite requirement for MemHandle and Taint. Added timer()
+      functions. Some minor documentation fixes and tidying up.
 
     Version 1.12 Nov 29, 2010
-        Changing from using Taint module, which has had a lot of problems,
-        to Scalar::Util, which is more (but not completely) stable.
+
+      Changing from using Taint module, which has had a lot of problems, to
+      Scalar::Util, which is more (but not completely) stable.
 
     Version 1.13 Dec 1, 2010
-        Fixed bug in prerequisites for Scalar::Util.
+
+      Fixed bug in prerequisites for Scalar::Util.
+
+    Version 1.14 February 23, 2013
+
+      Added showsth, showsql, and explainsql. Added the separateprint
+      option to setoutput. Tidied up documentation. Fixed problems with
+      prerequisites. Probably added many other features since the last time
+      I uploaded this module, but can't remember tham all.
+
+POD ERRORS
+
+    Hey! The above document had some coding errors, which are explained
+    below:
+
+    Around line 3800:
+
+      '=item' outside of any '=over'
 

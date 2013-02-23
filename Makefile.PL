@@ -1,23 +1,25 @@
 use ExtUtils::MakeMaker;
-# See lib/ExtUtils/MakeMaker.pm for details of how to influence
-# the contents of the Makefile that is written.
-WriteMakefile(
-	'NAME'            => "Debug::ShowStuff",
-	'VERSION_FROM'    => "ShowStuff.pm", # finds $VERSION
-	'PREREQ_PM'       => {
-		'Scalar::Util' => 1.21,
-		'Tie::IxHash' => 1.1,
-		'MemHandle' => 0.06,
-	}, # e.g., Module::Name => 1.1
-	
-	# Add these new keywords supported since 5.005
-	(
-		$] >= 5.005 ?
-			(
-				ABSTRACT_FROM  => "ShowStuff.pm", # retrieve abstract from module
-				AUTHOR         => "Miko O'Sullivan <miko\@idocs.com>"
-			) :
-			
-			()
-	),
-);
+my ($make_args);
+
+# WriteMakefile params
+$make_args = {
+               'NAME' => 'Debug::ShowStuff',
+               'AUTHOR' => 'Miko O\'Sullivan <miko@idocs.com>',
+               'ABSTRACT' => 'Debug::ShowStuff - A collection of handy debugging routines for displaying the values of variables with a minimum of coding.',
+               'PL_FILES' => {},
+               'EXE_FILES' => [],
+               'VERSION_FROM' => 'lib/Debug/ShowStuff.pm',
+               'LICENSE' => 'perl',
+               'PREREQ_PM' => {
+                                'Text::TabularDisplay' => 0,
+                                'Scalar::Util' => 0,
+                                'Devel::StackTrace' => 0,
+                                'String::Util' => 0,
+                                'Tie::IxHash' => 0,
+                                'Class::ISA' => 0,
+                                'Term::ReadKey' => 0
+                              }
+             };
+
+
+WriteMakefile(%$make_args);

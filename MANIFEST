@@ -1,5 +1,10 @@
-ShowStuff.pm
-Makefile.PL
 MANIFEST
+Changes
+LICENSE
+Makefile.PL
+Build.PL
+META.yml
 README
-test.pl
+lib/Debug/ShowStuff.pod
+lib/Debug/ShowStuff.pm
+t/test.t
