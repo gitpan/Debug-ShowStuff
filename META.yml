@@ -8,7 +8,10 @@ name: Debug::ShowStuff
 provides:
     Debug::ShowStuff:
         file: lib/Debug/ShowStuff.pm
-        version: 1.14
+        version: 1.15
+    Debug::ShowStuff::ShowVar:
+        file: lib/Debug/ShowStuff/ShowVar.pm
+        version: 0.10
 requires:
     Class::ISA: 0
     Devel::StackTrace: 0
@@ -18,4 +21,4 @@ requires:
     Text::TabularDisplay: 0
     Tie::IxHash: 0
     perl: 5.003
-version: 1.14
+version: 1.15

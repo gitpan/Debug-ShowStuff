@@ -6,7 +6,7 @@ use String::Util ':all';
 require 5.005; # require at least Perl version 5.005
 
 # version
-our $VERSION = '1.14';
+our $VERSION = '1.15';
 
 
 # allow for forced context
@@ -15,14 +15,14 @@ our $VERSION = '1.14';
 # function call was made in an array context.  This got confusing when the
 # call was the last call in a function.  I'm changing it so that, by default,
 # the function always outputs to the standard file handle (usually STDOUT).
-use vars qw[ $always_void ];
-$always_void = 1;
+our $always_void = 1;
 
 # allow for forced web/plain
-use vars qw[ $forceenv ];
+use vars qw[ $forceweb ];
 
+# global output file handle
 # default $out to STDOUT
-use vars qw[ $out ];
+our $out;
 $out = *STDOUT;
 
 # default $out to STDOUT
@@ -34,7 +34,7 @@ our $indent_level = 0;
 my $indent_tab = '   ';
 
 # constants
-use constant STDTABLE => qq|<p>\n<table border="4" rules="rows" cellspacing="0" cellpadding="3">\n|;
+use constant STDTABLE => qq|<p>\n<table style="STYLE" border="4" rules="rows" cellspacing="0" cellpadding="3">\n|;
 
 
 #---------------------------------------------------------------------
@@ -77,9 +77,12 @@ push @ISA, 'Exporter';
 	backtrace
 	dietrace
 	autoshow
+	
 	forceenv
 	forcetext
 	forceweb
+	forcenone
+	
 	showisa
 	
 	showsth
@@ -106,33 +109,31 @@ the values of variables with a minimum of coding.
 
 Here's a sampling of a few of my favorite functions in this module.
 
-	use Debug::ShowStuff ':all';
-	
-	# display values of a hash or hash reference
-	showhash %hash;
+ use Debug::ShowStuff ':all';
+ 
+ # display values of a hash or hash reference
+ showhash %hash;
 	showhash $hashref;
-	
-	# display values of an array or array reference
-	showarr @arr;
-	showarr $arrref;
-	
-	# show all the params received through CGI
-	showcgi();
-	
-	# A particularly fancy utility: display STDERR at top of web page
-	my $warnings = showstderr;
+ 
+ # display values of an array or array reference
+ showarr @arr;
+ showarr $arrref;
+ 
+ # show all the params received through CGI
+ showcgi();
+ 
+ # A particularly fancy utility: display STDERR at top of web page
+ my $warnings = showstderr;
 
 
 =head1 INSTALLATION
 
 C<Debug::ShowStuff> can be installed with the usual routine:
 
-	perl Makefile.PL
-	make
-	make test
-	make install
-
-You can also just copy ShowStuff.pm into the Debug/ directory of one of your library trees.
+ perl Makefile.PL
+ make
+ make test
+ make install
 
 =head1 DESCRIPTION
 
@@ -144,12 +145,26 @@ favorite routines and grew as I added to that collection.  Finally I decided
 to publish these tools in the hope that other Perl programmers will find
 them useful.
 
-C<Debug::ShowStuff> is intended for debugging, not for production work.  I would
-discourage anyone from using C<Debug::ShowStuff> in ready-for-primetime code.
+=head2 Not for production work
+
+C<Debug::ShowStuff> is for debugging, not for production work. It does not
+always output the actual value of something, but rather information B<about>
+the value. For example, the following code outputs the actual value in the
+first line, but a note about the value in the second.
+
+ println 'my value';
+ println undef;
+
+which outputs
+
+ my value
+ [undef]
+
+I would discourage you from using C<Debug::ShowStuff> in production code.
 C<Debug::ShowStuff> is only for quick-n-dirty displays of variable values in
 order to debug your code.
 
-=head1 text and web modes
+=head2 Text and web modes
 
 The functions in C<Debug::ShowStuff> are designed to output either in plain
 text mode (like if you're running the script from a command prompt), or in web
@@ -161,10 +176,10 @@ output as they are.
 Generally you won't need to bother telling C<Debug::ShowStuff> if you're in
 text or web mode... it figures it out on its own.
 
-=head1 dynamic output/return: different than previous versions
+=head2 Dynamic output/return: different than previous versions
 
-NOTE: The dynamic behavior of "show" functions has changed since the last
-version of Debug::ShowStuff.  "show" functions now always output to STDOUT
+NOTE: The dynamic behavior of "show" functions has changed since earlier
+versions of Debug::ShowStuff.  "show" functions now always outputs to STDOUT
 or STDERR unless $Debug::ShowStuff::always_void is set to false. By default
 $always_void is true.
 
@@ -188,7 +203,7 @@ By default, output is sent to STDOUT, not STDERR.  You can change the
 default output to STDERR using the C<setoutput> command.  See the docs
 for that command for more detail.
 
-=head1 Displaying "invisible" strings
+=head2 Displaying "invisible" strings
 
 To facilitate telling the difference between C<[undef]> and an empty string,
 functions output the strings "[undef]" and "[empty string]".  So, for example,
@@ -213,8 +228,7 @@ produces this:
 
 #------------------------------------------------------------------------------
 # default
-#
-# Private sub
+# private subroutine
 #
 sub default {
 	for (my $i=0; $i<=$#_; $i++) {
@@ -229,31 +243,179 @@ sub default {
 
 
 #------------------------------------------------------------------------------
+# println
+#
+
+=head2 println
+
+C<println> was the original Debug::ShowStuff function.  It simply outputs the
+given values.
+
+In text mode it adds a newline to the end.
+
+For example, this code:
+
+ println "hello world";
+
+produces this output, including the newline:
+
+ hello world
+
+In L<web mode|/"Text and web modes"> it puts the output inside a <p> element. The values are HTML
+escaped so that HTML-significant characters like < and > are actually
+displayed as < and >.  The <p> element has CSS styles set so that the
+characters are always black, the background is always white, text is
+left-aligned, and the <p> element has a black border, regardless of the styles
+of the surrounding elements. So, for example, in web mode, the following code:
+
+ println 'whatever';
+
+outputs the following HTML:
+
+ <p style="background-color:white;color:black;text-align:left">whatever</p>
+
+Like other "show" functions, undef is output as the string "[undef]" and
+an empty string is output as the string "[empty string]".
+
+Values in the arguments array are output concatenated together with no
+spaces in between.  Each value is evaluated independently for if it
+is undef, empty string, or a string with visible content.  So, for example,
+this code:
+
+ println "whatever", "", undef, "dude";
+
+outputs this:
+
+ whatever[empty string][undef]dude
+
+=cut
+
+# And after all that documentation, the sub is only one line long.  println
+# actually calls the private sub "printer" with a few extra arguments.  println
+# shares printer with printnorm.
+
+sub println {
+	return printer (wantarray(), 'p', "\n",  @_);
+}
+#
+# println
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# indent
+#
+
+=head2 indent()
+
+C<indent()> is for situations where you're outputting a lot of stuff and you
+want to tidy up the putput with indentation.
+In L<text mode|/"Text and web modes"> the output is indented with 3 spaces per
+indentation level.  In web mode the output is indented with 20px per
+indentation level.
+
+C<indent()> must be assigned to a variable or it has no effect.  C<indent()>
+increases the indent level by one.  When the variable goes out of scope, the
+indent level is decreased by one.
+
+For example suppose you want to display the values of records from a database.
+You might loop through the records, outputting them like this:
+
+ while (my $record = $sth->fetchrow_hashref) {
+    println $record->{'name_nick'};
+    my $indent = indent();
+    showhash $record;
+ }
+
+That would produce output something like this:
+
+ Ricky
+   ---------------------------------------
+   name_first  = Rick
+   name_last   = Adams
+   ---------------------------------------
+
+ Dan
+   ---------------------------------------
+   name_first  = Daniel
+   name_last   = Bradley
+   ---------------------------------------
+
+By default, three spaces are used to indent. To change that set
+$Debug::ShowStuff::indent_tab to whatever string you want to use for
+indentation.
+
+B<option:> bottom_space
+
+The C<bottom_space> option indicates to output an extra line at the bottom
+of the indented output, just to give some extra division before the next
+batch of code.  For example, the following code does not use C<bottom_space>:
+
+ foreach my $name (qw[Larry Moe]) {
+    println $name;
+    my $indent = indent(bottom_space=>1);
+    println 'years: ', length($name);
+ }
+
+and so produces the following output:
+
+ Larry
+    years: 5
+ Moe
+    years: 3
+
+But this code:
+
+ foreach my $name (qw[Larry Moe]) {
+    println $name;
+    my $indent = indent(bottom_space=>1);
+    println 'years: ', length($name);
+ }
+
+produces this output:
+
+ Larry
+    years: 5
+
+ Moe
+    years: 3
+
+=cut
+
+sub indent {
+	my (%opts) = @_;
+	return Debug::ShowStuff::Indent->new(%opts);
+}
+#
+# indent
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
 # showstuff
 #
 
 =head2 showstuff()
 
 This function turns on/off most of the functions in this module, with one
-import exception explained below.  The function also returns the state of
+important exception explained below.  The function also returns the state of
 whether or not Debug::ShowStuff is on/off.
 
 If a parameter is sent, that param is used to turn display on/off.  The
 value is stored in the global variable $Debug::ShowStuff::active.
 
 The function is also used by most subroutines to determine if they should
-actually output anything.  $active is not the only criteria used to determine
-if Debug::ShowStuff is active.  The algorithm is as follows:
+actually output anything.  $Debug::ShowStuff::active is not the only criteria
+used to determine if Debug::ShowStuff is active.  The algorithm is as follows:
 
-- If the environment variable SHOWSTUFF is defined and false then this function
-returns false regardless of the state of $active.
+- If the environment variable $ENV{'SHOWSTUFF'} is defined and false then
+showstuff() returns false regardless of the state of $active.
 
 - If the environment variable $ENV{'SHOWSTUFF'} is not defined or is defined
-and true then $active is used to determine on/off.
+and true then showstuff() uses $Debug::ShowStuff::active to determine on/off.
 
-The purpose of this algorithm is to allow the used of debugging display in a
-regression test but turn off those displays when a lot of tests are run at once
-and only pass/fail information is needed from the regtest.
+The purpose of this algorithm is to allow the use of debugging display in
+situations where one perl script calls another, such as in regression testing.
 
 For example, suppose you have a script as follows:
 
@@ -334,67 +496,6 @@ sub showstuff {
 
 
 #------------------------------------------------------------------------------
-# println
-#
-
-=head2 println
-
-C<println> was the original Debug::ShowStuff function.  It simply outputs
-the given values.
-
-In text mode it adds a newline to the end.
-
-For example, this code:
-
- println "hello world";
-
-produces this output, including the newline:
-
- hello world
-
-In web mode it puts the output inside a <p> element. The values are HTML
-escaped so that HTML-significant characters like < and > are actually
-displayed as < and >.  The <p> element has CSS styles set so that the
-characters are always black, the background is always white, text is
-left-aligned, and the <p> element has a black border, regardless
-of the styles of the surrounding elements. So, for example, in web mode,
-the following code:
-
- println 'whatever';
-
-outputs the following HTML:
-
- <p style="background-color:white;color:black;text-align:left">whatever</p>
-
-Like other "show" functions, undef is output as the string "[undef]" and
-an empty string is output as the string "[empty string]".
-
-Values in the arguments array are output concatenated together with no
-spaces in between.  Each value is evaluated independently for if it
-is undef, empty string, or a string with visible content.  So, for example,
-this code:
-
- println "whatever", "", undef, "dude";
-
-outputs this:
-
- whatever[empty string][undef]dude
-
-=cut
-
-# And after all that documentation, the sub is only one line long.  println
-# actually calls the private sub "printer" with a few extra arguments.  println
-# shares printer with printnorm.
-
-sub println {
-	return printer (wantarray(), 'p', "\n",  @_);
-}
-#
-# println
-#------------------------------------------------------------------------------
-
-
-#------------------------------------------------------------------------------
 # printnorm
 #
 
@@ -415,7 +516,6 @@ sub printnorm {
 
 #------------------------------------------------------------------------------
 # printer
-#
 # Private sub: called by both println and printnorm
 #
 sub printer {
@@ -437,7 +537,12 @@ sub printer {
 	
 	# print as web page
 	if (inweb()) {
-		print $fh qq|<$html_el style="background-color:white;color:black;text-align:left">|, htmlesc($str), "</$html_el>\n";
+		my $indent = web_indent();
+		
+		print $fh
+			qq|<$html_el style="${indent}background-color:white;color:black;text-align:left">|,
+			htmlesc($str),
+			"</$html_el>\n";
 	}
 	
 	# else print as text
@@ -459,6 +564,33 @@ sub printer {
 }
 #
 # printer
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# web_indent
+#
+
+# constant: how many pixels for a single web indent
+use constant WEB_INDENT => 20;
+
+sub web_indent {
+	my ($indent);
+	
+	if ($indent_level) {
+		$indent =
+			'margin-left:' .
+			($indent_level * WEB_INDENT) .
+			';';
+	}
+	else {
+		$indent = '';
+	}
+	
+	return $indent;
+}
+#
+# web_indent
 #------------------------------------------------------------------------------
 
 
@@ -500,6 +632,16 @@ This code, using a hash reference, produces exactly the same output:
 
  showhash $hash;
 
+If the hash is empty, then that fact is output.  So, this code:
+
+ showhash {};
+
+produces this output:
+
+ ---------------------------------------
+ [empty hash]
+ ---------------------------------------
+
 If an undef value is sent instead of a hashref, then that fact is displayed
 instead of a hash.  For example consider the following code that uses
 a variable that is undef:
@@ -518,12 +660,48 @@ Optional arguments only come into play if the first argument is a hashref.
 B<option:> title => "string"
 
 If this option is sent, the string is displayed at the top of the
-display of the hash values.
+display of the hash values.  So this code:
+
+ my $hash = {
+    Larry => 'curly headed guy',
+    Curly => 'funny bald guy',
+    Moe => 'guy in charge',
+ };
+
+ showhash $hash, title=>'Stooges';
+
+produces this output:
+
+ --- Stooges ---------------------------------
+ Curly = funny bald guy
+ Larry = curly headed guy
+ Moe   = guy in charge
+ ---------------------------------------------
+
 
 B<option:> line_cut => 1
 
 If the C<line_cut> option is sent, then each value is truncated after the first
-newline if there is one.
+newline if there is one. The fact that there is more output is mentioned. So
+the following code:
+
+ my $hash = {
+    Larry => "curly\nheaded guy",
+    Curly => "funny\nbald guy",
+    Moe => "guy\nin charge",
+ };
+
+ showhash $hash, line_cut =>1;
+
+produces this output.
+
+ ---------------------------------------
+ Curly = funny [more lines...]
+ Larry = curly [more lines...]
+ Moe   = guy [more lines...]
+ ---------------------------------------
+
+Several other options do exactly the same thing: linecut, line_chop, and first_line.
 
 =cut
 
@@ -556,10 +734,13 @@ my %myhash;
 my $maxkey = 0;
 my $maxval = 0;
 my $fh = getfh(wantarray);
-my (%opts, $linecut, @keys, $id_prefix);
+my $indent = web_indent();
+my (%opts, $linecut, @keys, $id_prefix, $table_tag);
 
 # open table
-print $fh STDTABLE;
+$table_tag = STDTABLE;
+$table_tag =~ s|STYLE|$indent|s;
+print $fh $table_tag;
 
 # special case: only one element and it's undefined
 if ( (@_ == 1) && (! defined($_[0])) ) {
@@ -570,7 +751,7 @@ if ( (@_ == 1) && (! defined($_[0])) ) {
 if (ref $_[0]){
 	%myhash = %{$_[0]};
 	%opts = @_[1..$#_];
-	$linecut = $opts{'line_cut'} || $opts{'line_chop'} || $opts{'first_line'};
+	$linecut = $opts{'line_cut'} || $opts{'linecut'} || $opts{'line_chop'} || $opts{'first_line'};
 }
 else {
 	%myhash = @_;
@@ -788,8 +969,8 @@ sub showhashplain {
 
 Displays the values of an array.  c<showarr> and c<showarray>
 
-Each element is displayed in a table row (in web mode) or on a separate line
-(in text mode).
+Each element is displayed in a table row (in L<web mode|/"Text and web modes">)
+or on a separate line (in text mode).
 
 If C<showarray> receives exactly one argument, and if that item is an array
 reference, then the routine assumes that you want to display the elements in
@@ -1088,7 +1269,8 @@ sub showcgi {
 showstuff() or return '';
 
 my ($q, %opts) = @_;
-my (@keys, $fh, $skipempty, %skip);
+my (@keys, $fh, $skipempty, %skip, $table_tag);
+my $indent = web_indent();
 
 # $q = $opts{'r'} || $opts{'q'} || $opts{'cgi'} || CGI->new();
 $skipempty = $opts{'skipempty'};
@@ -1099,7 +1281,10 @@ if (defined $opts{'skip'})
 @keys = sort $q->param;
 $fh = getfh(wantarray);
 
-print $fh STDTABLE;
+# open table
+$table_tag = STDTABLE;
+$table_tag =~ s|STYLE|$indent|s;
+print $fh $table_tag;
 
 # title
 print $fh <<"(TABLETITLE)";
@@ -1143,7 +1328,10 @@ foreach my $key (@keys){
 		'</td><td></td><td>';
 	
 	if (@vals > 1) {
-		print $fh STDTABLE;
+		# open table
+		$table_tag = STDTABLE;
+		$table_tag =~ s|STYLE||s;
+		print $fh $table_tag;
 		
 		foreach my $val (@vals) {
 			print $fh
@@ -1402,8 +1590,8 @@ sub getfh {
 	my ($fh);
 	
 	# if explicit context
-	if (defined $always_void)
-		{ undef $wa ;}
+	if ($always_void)
+		{ undef $wa }
 	
 	# if called in void context, outputs to STDOUT,
 	# otherwise returns string
@@ -1412,9 +1600,11 @@ sub getfh {
 	    $fh = MemHandle->new('');
 	}
 	
-	else
-		{$fh = $out}
+	else {
+		$fh = $out;
+	}
 	
+	# return file handle
 	return $fh;
 }
 # 
@@ -1505,20 +1695,34 @@ sub asarr {
 
 Prints a horizontal rule.  Handy for dividing up multiple println's.
 
-In text mode, the horizontal rule is a set of 80 dashes.
+In text mode, the horizontal rule is a set of 80 dashes. In
+L<web mode|/"Text and web modes">, the output is either a <hr> element or a <p>
+element, depending on the title option (see "title" below).
 
-In web mode, the output is an <hr> tag, unless the C<title> option is sent,
-in which case the output is C<p> element with the title as the content. The
-<p> element has a gray background and a black border.
+So, for example, the following line outputs a simple horizontal rule:
 
 B<option:> title
 
 If the C<title>option is sent, the title is embedded in the horizontal rule.
+So, for example, the following code produces a horizontal rule with with the
+string "test" embedded in it:
+
+ printhr title=>'test';
+
+If only one param is sent, it is assumed that param is the title.  So the'
+following code produces exactly the same thing as the example above:
+
+ printhr 'test';
+
+In web mode, a title changes the HTML element that is output.  If no title is
+given then printhr outputs an <hr> element.  If a title is given the output is
+C<p> element with the title as the content. The <p> element has a gray
+background and a black border.
 
 B<option:> dash
 
 If the C<dash>option is sent, the given character is used as the separator.
-Only applies to text mode;
+This param only applies to text mode;
 
 =cut
 
@@ -1538,10 +1742,13 @@ sub printhr {
 	
 	# web mode
 	if (inweb()) {
+		my $indent = web_indent();
+		
 		if (defined $title) {
 print $fh <<"(HTML)";
 <p
 	style="
+		$indent
 		background-color: #cccccc;
 		border: 1px solid black;
 		color: black;
@@ -1557,7 +1764,7 @@ print $fh <<"(HTML)";
 		}
 		
 		else {
-			print $fh "<hr>\n";
+			print $fh qq|<hr style="$indent">\n|;
 		}
 	}
 	
@@ -1911,41 +2118,18 @@ sub showstderr {
 
 
 #------------------------------------------------------------------------------
-# inweb
-#
-
-=head2 inweb
-
-Returns a guess on if we're in a web environment.  The guess is pretty simple:
-if the environment variable C<REQUEST_URI> is true (in the Perlish sense)
-then this function returns true.
-
-If the global C<$Debug::ShowStuff::forceenv> is defined, this function
-returns the value of C<$Debug::ShowStuff::forceenv>.
-
-=cut
-
-sub inweb {
-	my (%opts) = @_;
-	
-	unless ($opts{'strict'}) {
-		if (defined $forceenv)
-			{ return $forceenv }
-	}
-	
-	return ($ENV{'REQUEST_URI'} || $ENV{'SERVER_NAME'});
-}
-#
-# inweb
-#------------------------------------------------------------------------------
-
-
-#------------------------------------------------------------------------------
 # forceenv
 #
-sub forceenv {
-	$forceenv = $_[0];
-}
+
+=head2 forcetext, forceweb, forcenone
+
+By default, Debug::Showstuff guesses if it should be in
+L<text or web mode|/"Text and web modes">. These functions are for when you
+want to explicitly tell Debug::ShowStuff what mode it should be in.
+C<forcetext> forces text mode.  C<forceweb> forces web mode.  C<forcenone>
+tells Debug::Showstuff that you don't want to force either mode.
+
+=cut
 
 sub forcetext {
 	forceenv(0);
@@ -1954,9 +2138,49 @@ sub forcetext {
 sub forceweb {
 	forceenv(1);
 }
+
+sub forcenone {
+	forceenv(undef);
+}
+
+sub forceenv {
+	$forceweb = $_[0];
+}
+
 #
 # forceenv
 #------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+# inweb
+#
+
+=head2 inweb
+
+Returns a guess on if we're in a L<web environment|/"Text and web modes">.  The
+guess is pretty simple: if the environment variable C<REQUEST_URI> is true (in
+the Perlish sense) then this function returns true.
+
+If the global C<$Debug::ShowStuff::forceenv> is defined, this function returns
+the value of C<$Debug::ShowStuff::forceenv>.
+
+=cut
+
+sub inweb {
+	my (%opts) = @_;
+	
+	unless ($opts{'strict'}) {
+		if (defined $forceweb)
+			{ return $forceweb }
+	}
+	
+	return ($ENV{'REQUEST_URI'} || $ENV{'SERVER_NAME'});
+}
+#
+# inweb
+#------------------------------------------------------------------------------
+
 
 
 
@@ -1967,7 +2191,7 @@ sub forceweb {
 =head2 output_to_file($path)
 
 Sends Debug::ShowStuff output to a file instead of to STDOUT or STDERR.  The
-value of this function MUST be assigned to a variable or it has no effect.
+value of this function must be assigned to a variable or it has no effect.
 Don't do anything with the returned value... it is NOT a file handle.  The
 returned value is an object that, when it goes out of scope, closes the output
 file handle.
@@ -1996,16 +2220,24 @@ sub output_to_file {
 		croak $msg;
 	}
 	
-	require FileHandle;
+	# if path is a reference, assume it's a filehandle object
+	if (ref $path) {
+		$fh = $path;
+	}
 	
-	# open new or open append
-	if ($opts{'append'})
-		{ $arrows = '>>' }
-	else
-		{ $arrows = '>' }
-	
-	$fh = FileHandle->new("$arrows$path");
-	$fh->autoflush(1);
+	# else open filehandle to path
+	else {
+		require FileHandle;
+		
+		# open new or open append
+		if ($opts{'append'})
+			{ $arrows = '>>' }
+		else
+			{ $arrows = '>' }
+		
+		$fh = FileHandle->new("$arrows$path");
+		$fh->autoflush(1);
+	}
 	
 	setoutput($fh);
 	
@@ -2060,10 +2292,11 @@ mode, which means any existing contents are removed.
 sub setoutput {
 	my $outname = shift;
 	
-	# filehandle
-	if ( UNIVERSAL::isa($outname, 'FileHandle') ) {
+	# if reference, assume it's filehandle
+	# if ( UNIVERSAL::isa($outname, 'FileHandle') ) {
+	if ( ref $outname ) {
 		$out = $outname;
-		$forceenv = 0;
+		$forceweb = 0;
 	}
 	
 	# STDOUT
@@ -2074,7 +2307,7 @@ sub setoutput {
 	# STDERR
 	elsif (lc($outname) eq 'stderr') {
 		$out = *STDERR;
-		$forceenv = 0;
+		$forceweb = 0;
 	}
 	
 	# Debug::ShowStuff::SeparatePrint
@@ -2299,7 +2532,7 @@ an array-ref of SQL parameters.  explainsql prepends "EXPLAIN ANALYZE" to your
 SQL, runs the statement, then outputs the results.
 
 I have only used explainsql with PostGresql.  I would be interested hear about
-how it works with other database management systems and how it mught be
+how it works with other database management systems and how it might be
 improved to work in those environments.
 
 =cut
@@ -2595,99 +2828,6 @@ print <<'(HTML)';
 #------------------------------------------------------------------------------
 
 
-#------------------------------------------------------------------------------
-# indent
-#
-
-=head2 indent()
-
-C<indent()> is for situations where you're outputting a lot of stuff and you
-want to tidy up the list by indenting some of the output.  Currently
-C<indent()> only has an effect in text mode.  It does nothing in web mode.
-
-C<indent()> must be assigned to a variable or it has no effect.  C<indent()>
-increases the indent level by one.  When the variable goes out of scope, the
-indent level is decreased by one.
-
-For example suppose you want to display the values of records from a database.
-You might loop through the records, outputting them like this:
-
- while (my $record = $sth->fetchrow_hashref) {
-    println $record->{'name_nick'};
-    my $indent = indent();
-    showhash $record;
- }
-
-That would produce output something like this:
-
- Ricky
-   ---------------------------------------
-   name_first  = Rick
-   name_last   = Adams
-   name_middle = Horatio
-   name_nick   = Ricky
-   salary      = $15,000
-   ---------------------------------------
-
- Dan
-   ---------------------------------------
-   name_first  = Daniel
-   name_last   = Bradley
-   name_middle = [undef]
-   name_nick   = Dan
-   salary      = $250,000
-   ---------------------------------------
-
-By default, three spaces are used to indent. To change that set
-$Debug::ShowStuff::indent_tab to whatever string you want to use for
-indentation.
-
-B<option:> bottom_space
-
-The C<bottom_space> option indicates to output an extra line at the bottom
-of the indented output, just to give some extra division before the next
-batch of code.  For example, the following code does not use C<bottom_space>:
-
- foreach my $name (qw[Larry Moe]) {
-    println $name;
-    my $indent = indent(bottom_space=>1);
-    println 'length: ', length($name);
- }
-
-and so produces the following output:
-
- Larry
-    length: 5
- Moe
-    length: 3
-
-But this code:
-
- foreach my $name (qw[Larry Moe]) {
-    println $name;
-    my $indent = indent(bottom_space=>1);
-    println 'length: ', length($name);
- }
-
-produces this output:
-
- Larry
-    length: 5
-
- Moe
-    length: 3
-
-
-=cut
-
-sub indent {
-	my (%opts) = @_;
-	return Debug::ShowStuff::Indent->new(%opts);
-}
-#
-# indent
-#------------------------------------------------------------------------------
-
 
 #------------------------------------------------------------------------------
 # tempshowstuff
@@ -2695,7 +2835,7 @@ sub indent {
 
 =head2 tempshowstuff
 
-Temporarily turn showstuff on or off.  Create a variable int he lexical scope
+Temporarily turn showstuff on or off.  Create a variable in the lexical scope
 where you want the tempoary change, like this:
 
 my $temp = tempshowstuff(1)
@@ -2803,8 +2943,12 @@ B<method:> $timer->elapsed
 Returns the difference between when the timer was started and the current
 time.
 
-=cut
+B<method:> $timer->silence
 
+Turns off the timer so that it doesn't display anything when it dies.
+
+
+=cut
 
 sub timer {
 	my (%opts) = @_;
@@ -3025,8 +3169,6 @@ sub dietrace {
 #
 # dietrace
 #------------------------------------------------------------------------------
-
-
 
 
 
@@ -3749,7 +3891,8 @@ sub PRINTF {
 ###############################################################################
 
 
-
+# return true
+1;
 __END__
 
 
@@ -3795,8 +3938,6 @@ Scalar::Util, which is more (but not completely) stable.
 
 Fixed bug in prerequisites for Scalar::Util.
 
-=back
-
 =item Version 1.14    February 23, 2013
 
 Added showsth, showsql, and explainsql.  Added the separateprint option to
@@ -3808,6 +3949,3 @@ but can't remember tham all.
 
 =cut
 
-
-# return true
-1;
