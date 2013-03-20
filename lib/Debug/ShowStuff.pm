@@ -6,7 +6,7 @@ use String::Util ':all';
 require 5.005; # require at least Perl version 5.005
 
 # version
-our $VERSION = '1.15';
+our $VERSION = '1.16';
 
 
 # allow for forced context

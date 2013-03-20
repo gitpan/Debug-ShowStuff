@@ -5,12 +5,20 @@ use Filter::Util::Call;
 # use re 'taint';
 use vars qw($VERSION $debug);
 
+# version
+$VERSION = '0.11';
+
+
+
 =head1 NAME
 
 Debug::ShowStuff::ShowVar - shortcuts for Debug::ShowStuff
 
 =head1 SYNOPSIS
 
+ use Debug::ShowStuff ':all';
+ use Debug::ShowStuff::ShowVar;
+ 
  # output the name of the variable followed by the value of the variable
  showvar $myvar;
 
@@ -26,7 +34,7 @@ Debug::ShowStuff::ShowVar is a preprocessor that provides shortcuts for a few
 Debug::ShowStuff commands.  This module modifies your code so that some simple
 commands are translated into longer Debug::ShowStuff commands.
 
-Debug::ShowStuff::ShowVar is a b<filter>, so it requires very simple syntax for
+Debug::ShowStuff::ShowVar is a B<filter>, so it requires very simple syntax for
 it to understand your code.  Don't get fancy, this module won't understand it.
 
 =head1 Commands
@@ -44,8 +52,8 @@ translates into this line
 
 =head2 ##
 
-A double hash followed by space followed by text gets translated into a println
-statement of that text.  So, for example, this code:
+A double hash followed by text gets translated into a println statement of that
+text.  So, for example, this code:
 
  ## my text
 
@@ -90,10 +98,6 @@ So the following line accomplishes the same thing as above:
  println 'begin'; ##i
 
 =cut
-
-
-# version
-$VERSION = '0.10';
 
 
 
@@ -229,6 +233,10 @@ F<miko@idocs.com>
 =item Version 0.10    March 17, 2013
 
 Initial public release.
+
+=item Version 0.11    March 19, 2013
+
+Small but important fix to documentation.
 
 =back
 
